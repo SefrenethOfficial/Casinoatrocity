@@ -116,6 +116,11 @@ export class Hud {
     this.style('health-fill', 'width', Math.max(0, (player.health / player.maxHealth) * 100).toFixed(0) + '%');
     this.set('zleft', zombies.phase === 'active' ? `${zombies.remaining} LEFT` : game.doorHint ? 'THE DOOR IS OPEN \u2014 MOVE ON' : '');
 
+    const boss = zombies.boss;
+    const showBoss = !!(boss && !boss.dead);
+    if (this.cache.showBoss !== showBoss) { this.cache.showBoss = showBoss; $('bossbar').classList.toggle('hidden', !showBoss); }
+    if (showBoss) this.style('bossbar-fill', 'width', Math.max(0, (boss.hp / boss.maxHp) * 100).toFixed(1) + '%');
+
     const pu = [];
     if (game.doubleT > 0) pu.push(`<span style="color:#ffd65e">DOUBLE POINTS ${Math.ceil(game.doubleT)}</span>`);
     if (game.instaT > 0) pu.push(`<span style="color:#ff5a5a">INSTA-KILL ${Math.ceil(game.instaT)}</span>`);

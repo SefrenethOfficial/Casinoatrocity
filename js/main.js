@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { WEAPONS, BOX_POOL } from './data.js';
 import { save, loadSave, writeSave } from './save.js';
 import { AudioSys } from './audio.js';
-import { World, BOX_COST, UPGRADE_COST, AMMO_COST } from './world.js';
+import { World, BOX_COST, UPGRADE_COST, AMMO_COST, LAB_ROOM } from './world.js';
 import { Player } from './player.js';
 import { WeaponSystem } from './weapons.js';
 import { Effects } from './gore.js';
@@ -179,6 +179,10 @@ class Game {
   }
 
   // ---------------------------------------------------------------- zombies mode callbacks
+  onBossSpawn() {
+    this.hud.announce('THE WARDEN', 'Something huge drags itself out of the vats', 3.5);
+    this.audio.roundStart();
+  }
   onRoundStart(round) {
     this.dropsThisRound = 0;
     this.hud.announce('ROUND ' + round, '', 2.6);
@@ -192,7 +196,7 @@ class Game {
     writeSave();
     // each cleared wave opens the next door; the ninth opens the lab
     const opened = this.world.openDoor(round);
-    const sub = !opened ? `+${bonus} chips` : round === 9 ? `+${bonus} chips \u2022 the lab is open` : `+${bonus} chips \u2022 a door grinds open`;
+    const sub = !opened ? `+${bonus} chips` : round === LAB_ROOM - 1 ? `+${bonus} chips \u2022 the lab is open` : `+${bonus} chips \u2022 a door grinds open`;
     this.hud.announce('ROUND CLEARED', sub, 3.6);
     this.audio.roundEnd();
     if (opened) {
@@ -231,9 +235,10 @@ class Game {
     save.totalKills++;
     if (head) this.headshots++;
     let mode = 'normal';
-    if (acid || opts.gib || (insta && !opts.melee)) mode = 'gib';
+    if (z.def.boss || acid || opts.gib || (insta && !opts.melee)) mode = 'gib';
     else if (head || (opts.slice && Math.random() < 0.5)) mode = 'head';
     this._goreKill(z, mode, dir);
+    if (z.def.boss) { this.hud.announce('WARDEN DOWN', 'The lab is yours \u2014 for now', 4); this.player.shake = 0.08; }
     this.addPoints(z.def.points + (head ? 40 : 0) + (opts.melee ? 70 : 0));
     this.addChips(z.def.chips + (head ? 2 : 0));
     this.audio.kill();
@@ -345,7 +350,7 @@ class Game {
     if (this.zombies.phase === 'intermission') this.zombies.phaseT = Math.min(this.zombies.phaseT, 3);
     this.audio.door();
     this.player.shake = 0.03;
-    this.hud.announce(d.k === 9 ? 'THE LAB' : 'SEALED IN', 'The door slams shut behind you', 2.6);
+    this.hud.announce(d.k === LAB_ROOM - 1 ? 'THE LAB' : 'SEALED IN', 'The door slams shut behind you', 2.6);
   }
 
   // ---------------------------------------------------------------- interactables

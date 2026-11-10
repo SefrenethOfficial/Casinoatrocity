@@ -1,5 +1,6 @@
 // The dungeon's undead (ghouls, crawlers, brutes) plus the round/wave director for Zombies mode.
 import * as THREE from 'three';
+import { LAB_ROOM } from './world.js';
 
 const ANIM_FPS = 9;   // poses update at this rate on purpose: choppy, stop-motion movement
 const lam = c => new THREE.MeshLambertMaterial({ color: c });
@@ -38,6 +39,8 @@ export const ENEMY_TYPES = {
   // lab-grown: fast, bleeds acid and bursts when it dies
   mutant:  { hp: 1.25, speed: 1.45, dmg: 34, reach: 1.4,  radius: 0.36, points: 90,  chips: 5,  hitAt: 0.3,  attackDur: 0.8,  centerY: 1.15, neckY: 1.5,  rise: 0.8, gore: 1.3, acid: true },
   brute:   { hp: 5.5,  speed: 0.62, dmg: 55, reach: 1.95, radius: 0.6,  points: 250, chips: 12, hitAt: 0.62, attackDur: 1.35, centerY: 1.15, neckY: 1.55, rise: 1.6, gore: 2.2 },
+  // the lab's warden: a slow, enormous tank spawned at the end of the lab
+  boss:    { hp: 1,    speed: 0.6,  dmg: 55, reach: 2.6,  radius: 1.0,  points: 2500, chips: 150, hitAt: 0.7, attackDur: 1.5, centerY: 1.2, neckY: 1.6, rise: 2.0, gore: 4, boss: true },
 };
 
 const tmp = { x: 0, z: 0 };
@@ -60,8 +63,8 @@ class Zombie {
     this.gone = false;      // set when gibbed: remove with no corpse
     this.stun = 0;
     this.fallDir = Math.random() < 0.5 ? 1 : -1;
-    this.scale = type === 'brute' ? 1.5 : type === 'mutant' ? rnd(1.12, 1.25) : rnd(0.92, 1.1);
-    this.rig = type === 'mutant' ? 'ghoul' : type;   // which skeleton/animation set it uses
+    this.scale = type === 'boss' ? 2.4 : type === 'brute' ? 1.5 : type === 'mutant' ? rnd(1.12, 1.25) : rnd(0.92, 1.1);
+    this.rig = type === 'mutant' ? 'ghoul' : type === 'boss' ? 'brute' : type;   // which skeleton/animation set it uses
     this.parts = [];
     this.legs = [];
     this.arms = [];
@@ -158,6 +161,25 @@ const BUILD = {
     z.legs = [z.add(GEO.bLeg, MAT.pants[0], 'body', -0.22, 0.78, 0), z.add(GEO.bLeg, MAT.pants[0], 'body', 0.22, 0.78, 0)];
     z.arms = [z.armL, z.armR];
   },
+  boss(z) {
+    const hide = lam(0x3a2630), plate = MAT.iron, glow = basic(0xff2a1a), bone = MAT.bone;
+    z.torso = z.add(GEO.bTorso, hide, 'body', 0, 1.2, 0); z.torso.rotation.x = 0.12; z.torso.scale.set(1.35, 1.4, 1.3);
+    const belly = z.add(GEO.bBelly, hide, 'body', 0, 0.82, 0.06); belly.scale.set(1.3, 1.2, 1.25);
+    z.add(GEO.stain, glow, null, 0, 0.1, 0.3, z.torso);
+    const chest = z.add(GEO.bPlate, plate, 'body', 0, 0.2, 0.22, z.torso); chest.scale.set(2.2, 3.0, 1.4);
+    z.head = z.add(GEO.bHead, hide, 'head', 0, 1.78, 0.12); z.head.scale.set(1.25, 1.25, 1.25);
+    z.jaw = z.add(GEO.gJaw, MAT.gore, null, 0, -0.2, 0.06, z.head);
+    for (const sx of [-0.08, 0.08]) z.add(GEO.eye, glow, null, sx, 0.03, 0.17, z.head);
+    for (const sx of [-1, 1]) { const h = z.add(GEO.bHorn, bone, null, sx * 0.17, 0.26, 0, z.head); h.rotation.z = -sx * 0.6; h.scale.set(1.5, 1.8, 1.5); }
+    z.armL = z.add(GEO.bArm, hide, 'body', -0.72, 1.55, 0); z.armL.scale.set(1.4, 1.35, 1.4);
+    z.armR = z.add(GEO.bArm, hide, 'body', 0.72, 1.55, 0); z.armR.scale.set(1.4, 1.35, 1.4);
+    const fl = z.add(GEO.bFist, plate, null, 0, -0.86, 0, z.armL); fl.scale.set(1.6, 1.6, 1.6);
+    const fr = z.add(GEO.bFist, plate, null, 0, -0.86, 0, z.armR); fr.scale.set(1.6, 1.6, 1.6);
+    z.add(GEO.bPlate, plate, 'body', -0.62, 1.72, 0); z.add(GEO.bPlate, plate, 'body', 0.62, 1.72, 0);
+    z.legs = [z.add(GEO.bLeg, plate, 'body', -0.28, 0.78, 0), z.add(GEO.bLeg, plate, 'body', 0.28, 0.78, 0)];
+    z.legs[0].scale.set(1.3, 1, 1.3); z.legs[1].scale.set(1.3, 1, 1.3);
+    z.arms = [z.armL, z.armR];
+  },
 };
 
 // Stepped pose update. Called ~9 times a second per enemy.
@@ -236,6 +258,8 @@ export class ZombieDirector {
     this.flowT = 0;
     this.maxAlive = 10;
     this.brutesLeft = 0;
+    this.boss = null;
+    this.bossWave = false;
   }
 
   reset() {
@@ -246,6 +270,8 @@ export class ZombieDirector {
     this.toSpawn = 0;
     this.phase = 'intermission';
     this.phaseT = 3.5;
+    this.boss = null;
+    this.bossWave = false;
   }
 
   get alive() { return this.zombies.reduce((n, z) => n + (z.dead ? 0 : 1), 0); }
@@ -257,25 +283,43 @@ export class ZombieDirector {
     return Math.round(hp);
   }
   // Rooms are small, so early waves are modest. Once the lab opens (round 10+) there are far more.
-  countFor(round) { return Math.min(Math.round((6 + 3 * (round - 1)) * (round >= 10 ? 1.5 : 1)), 110); }
-  maxAliveFor(round) { return round >= 10 ? 30 : Math.min(8 + 2 * round, 22); }
+  countFor(round) { return Math.min(Math.round((6 + 3 * (round - 1)) * (round >= LAB_ROOM ? 1.5 : 1)), 110); }
+  maxAliveFor(round) { return round >= LAB_ROOM ? 30 : Math.min(8 + 2 * round, 22); }
   // Tuned against the player: slower than a gun-sprint early on, but only the knife outruns crawlers.
   speedFor(round) { return Math.min(1.15 + 0.2 * round, 3.2); }
+  bossHP(round) { return 7000 + 3000 * Math.max(0, round - LAB_ROOM); }
 
   startRound() {
     this.round++;
     this.toSpawn = this.countFor(this.round);
     this.maxAlive = this.maxAliveFor(this.round);
     this.brutesLeft = this.round >= 5 ? 1 + Math.floor((this.round - 5) / 3) : 0;
+    this.bossWave = this.round >= LAB_ROOM && (this.round === LAB_ROOM || (this.round - LAB_ROOM) % 5 === 0);
     this.phase = 'active';
     this.spawnT = 1.2;
     this.game.onRoundStart(this.round);
+    if (this.bossWave) { this.toSpawn = Math.min(this.toSpawn, 12); this.spawnBoss(); }
+  }
+
+  spawnBoss() {
+    const { world, player } = this.game;
+    const labs = world.spawns.filter(s => s.room === LAB_ROOM);
+    const spots = (labs.length ? labs : world.spawns).slice().sort((a, b) =>
+      Math.hypot(b.x - player.pos.x, b.z - player.pos.z) - Math.hypot(a.x - player.pos.x, a.z - player.pos.z));
+    const s = spots[0] || { x: player.pos.x, z: player.pos.z };
+    const z = new Zombie('boss', s.x, s.z, this.bossHP(this.round), Math.min(this.speedFor(this.round) * ENEMY_TYPES.boss.speed, 2.0));
+    this.zombies.push(z);
+    this.hitMeshes.push(...z.parts);
+    this.game.scene.add(z.group);
+    this.boss = z;
+    this.game.audio.roar();
+    this.game.onBossSpawn();
   }
 
   pickType() {
     const r = this.round;
     if (this.brutesLeft > 0 && Math.random() < 0.12) { this.brutesLeft--; return 'brute'; }
-    if (r >= 10 && Math.random() < 0.3) return 'mutant';
+    if (r >= LAB_ROOM && Math.random() < 0.3) return 'mutant';
     if (r >= 3 && Math.random() < Math.min(0.1 + 0.03 * r, 0.35)) return 'crawler';
     return 'ghoul';
   }
@@ -284,7 +328,7 @@ export class ZombieDirector {
     const { world, player, audio } = this.game;
     let spots = world.spawnPoints(player.pos.x, player.pos.z);
     if (type === 'mutant') {   // mutants come out of the lab vents when they can
-      const vents = spots.filter(p => p.room === 10);
+      const vents = spots.filter(p => p.room === LAB_ROOM);
       if (vents.length) spots = vents;
     }
     const s = at || pick(spots);
@@ -307,7 +351,7 @@ export class ZombieDirector {
     world.computeFlow(player.pos.x, player.pos.z);
     for (let i = this.zombies.length - 1; i >= 0; i--) {
       const z = this.zombies[i];
-      if (world.reachable(z.x, z.z)) continue;
+      if (z.def.boss || world.reachable(z.x, z.z)) continue;
       if (!z.dead) {
         this.toSpawn++;
         if (z.type === 'brute') this.brutesLeft++;
@@ -323,7 +367,7 @@ export class ZombieDirector {
     if (z.dead) return false;
     z.hp -= amount;
     if (z.hp > 0) {
-      if (z.type !== 'brute') z.stun = 0.14;
+      if (z.type !== 'brute' && !z.def.boss) z.stun = 0.14;
       return false;
     }
     z.dead = true;
@@ -335,6 +379,7 @@ export class ZombieDirector {
       const i = this.hitMeshes.indexOf(p);
       if (i >= 0) this.hitMeshes.splice(i, 1);
     }
+    if (z.def.boss) this.boss = null;
     return true;
   }
 

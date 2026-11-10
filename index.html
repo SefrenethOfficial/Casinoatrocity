@@ -11,7 +11,7 @@
     // new files after an update. Bump BUILD whenever anything in js/ or css/ changes: every game
     // file is then requested under a new address, so nobody is left running a stale copy.
     (function () {
-      var BUILD = '9';
+      var BUILD = '10';
       var files = ['audio', 'cases', 'data', 'gore', 'hud', 'main', 'models', 'player', 'psx', 'save', 'weapons', 'world', 'zombies'];
       var imports = { three: './lib/three.module.js' };
       files.forEach(function (f) { imports['./js/' + f + '.js'] = './js/' + f + '.js?v=' + BUILD; });
@@ -44,6 +44,7 @@
       <div id="slots"></div>
     </div>
     <div id="hud-top">
+      <div id="bossbar" class="hidden"><div id="bossbar-name">THE WARDEN</div><div id="bossbar-track"><div id="bossbar-fill"></div></div></div>
       <div id="zleft"></div>
       <div id="powerups"></div>
     </div>

@@ -232,6 +232,10 @@ kbd:first-child { margin-left: 0; }
 #slots span.on { border-color: var(--gold); color: var(--gold); }
 #hud-top { position: absolute; top: 18px; left: 0; right: 0; text-align: center; text-shadow: 2px 2px 0 #000; }
 #zleft { font-size: 15px; letter-spacing: 0.2em; color: var(--muted); }
+#bossbar { width: min(620px, 80vw); margin: 0 auto 10px; }
+#bossbar-name { font-size: 20px; letter-spacing: 0.28em; color: #ff4455; text-shadow: 0 0 16px rgba(200,16,46,0.8), 2px 2px 0 #000; }
+#bossbar-track { height: 16px; margin-top: 4px; background: rgba(0,0,0,0.6); border: 1px solid #ff4455; box-shadow: 0 0 14px rgba(200,16,46,0.5); }
+#bossbar-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #7a0a12, #ff2a1a); transition: width 0.12s; }
 #powerups { display: flex; gap: 10px; justify-content: center; margin-top: 8px; font-size: 16px; letter-spacing: 0.1em; }
 #powerups span { padding: 3px 12px; background: rgba(0, 0, 0, 0.6); border: 1px solid currentColor; }
 #announce { position: absolute; top: 20%; left: 0; right: 0; text-align: center; opacity: 0; transition: opacity 0.5s; text-shadow: 0 0 30px rgba(200, 16, 46, 0.9), 3px 3px 0 #000; }

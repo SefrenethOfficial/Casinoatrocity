@@ -7,8 +7,8 @@ A PSX-styled browser FPS built with [three.js](https://threejs.org/). Survive ro
 ## What's in it
 
 - **PSX look** — rendered at 240p (360p/480p in Settings), wobbling snapped vertices, chunky unfiltered textures, 15-bit dithered colour and stop-motion animation.
-- **Zombies mode** — you start locked in one nearly empty room. Clearing a wave opens the next door; walk through and it slams shut behind you, so buy what you want before moving on. Each new room adds something: a weapon rack, the Mystery Slot, a shrine, an ammo cache. Ghouls shamble, crawlers sprint at you from round 3, horned brutes arrive from round 5.
-- **The lab** — the tenth room is a laboratory. Once it opens the waves get much bigger, acid-blooded mutants pour out of the vents, and you can buy the LMG or overclock a gun for double damage.
+- **Zombies mode** — you start locked in one nearly empty room. Clearing a wave opens the next door; walk through and it slams shut behind you, so buy what you want before moving on. There are 16 rooms to fight through, each adding something new. Ghouls shamble, crawlers sprint at you from round 3, horned brutes arrive from round 5.
+- **The lab** — the 17th and final room is a laboratory. Reaching it spawns **The Warden**, a giant armored boss with a health bar, alongside acid-blooded mutants from the vents. Beat it for a big payout; another Warden turns up every 5 rounds after. You can also buy the LMG or overclock a gun here.
 - **Gore** — heads come off, arms get severed, close shotgun blasts and big guns burst bodies into chunks, and blood pools, sprays up walls and spatters the screen.
 - **Slow with a gun, fast with a knife** — you move slowly with a gun out, and heavier guns are slower still. Draw the knife to move at 175% speed; it slashes (hold fire) and stabs (aim button).
 - **Seven guns** — pistol, SMG, shotgun, assault rifle, sniper, LMG and a golden revolver.

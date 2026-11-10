@@ -6,48 +6,85 @@ import { canvasTexture, buildWeaponModel } from './models.js';
 
 export const CELL = 2;
 export const WALL_H = 3.6;
-export const ROOM_COUNT = 10;
+export const ROOM_COUNT = 17;   // set from the layout below
 export const UPGRADE_COST = 5000;
 export const BOX_COST = 950;
+export const AMMO_COST = 400;
 
 // Legend: . floor  C pillar  T tomb slab  S crates  B barrels  F brazier (light)  M mystery slot
 // 1/2/3/4 weapon racks  J/Q shrines (perks)  A ammo cache  Z enemy spawn  P player spawn
 // Lab only: K specimen tank  D lab bench  U overclock station  w ceiling light (walkable)
 //
-// Rooms 1-9 are 7x7 cells (14 m square) and snake through a 3x3 block; `at` is the room's
-// column/row in that block. Doors sit in the middle of a wall, so keep row 3 / column 3 clear there.
+// Dungeon rooms are 7x7 cells (14 m) laid out in a boustrophedon snake; consecutive rooms share a
+// wall, so a door is dropped in automatically between each pair. The lab is appended below the last.
 const ROOM = 7, PITCH = ROOM + 1, MID = 3;
-const ROOMS = [
-  { at: [0, 0], cells: ['Z.....F', '.......', '.......', '...P...', '.......', '.......', 'S..F..Z'] },   // 1: bare starting cell
-  { at: [1, 0], cells: ['F..1..F', '.......', '.......', '.......', '.......', '.C...C.', 'Z..A..Z'] },   // 2: SMG
-  { at: [2, 0], cells: ['Z...TTF', '....TT.', '.......', '.......', '.B.....', '.......', 'F...A.Z'] },   // 3: crypt
-  { at: [2, 1], cells: ['F.....Z', '.......', '.....S.', '......2', '.......', '.......', 'Z...A.F'] },   // 4: shotgun
-  { at: [1, 1], cells: ['Z..M..F', '.......', '.C...C.', '.......', '.C...C.', '.......', 'F..A..Z'] },   // 5: mystery slot
-  { at: [0, 1], cells: ['J.....F', '.......', '..TT...', 'F......', '.......', '.......', 'Z.A...Z'] },   // 6: thick skin shrine
-  { at: [0, 2], cells: ['F.....Z', '.......', '.......', '3......', '.......', '.SS....', 'Z...A.F'] },   // 7: assault rifle
-  { at: [1, 2], cells: ['Z..Q..F', '.......', '.C...C.', '.......', '.......', '.......', 'F..A..Z'] },   // 8: fast hands shrine
-  { at: [2, 2], cells: ['F.....Z', '..S....', '.......', '.......', '.......', '....B..', 'Z..A..F'] },   // 9: antechamber
-];
-// Door k (1-9) opens when wave k is cleared and leads into room k + 1. It shuts for good once
-// the player has walked through. [cellX, cellZ]
-const DOORS = [[8, 4], [16, 4], [20, 8], [16, 12], [8, 12], [4, 16], [8, 20], [16, 20], [24, 20]];
-// Room 10: the lab. 9x11 cells with its top-left interior cell at LAB_X, LAB_Z.
-const LAB_X = 25, LAB_Z = 13;
+const COLS = 4, ROWS = 4;
+const N_DUNGEON = COLS * ROWS;              // 16 dungeon rooms...
+export const LAB_ROOM = N_DUNGEON + 1;      // ...then the lab as the final room
+
+// Snake order of meta (column, row) positions. End-of-row rooms sit above the next row's start,
+// so every consecutive pair is edge-adjacent.
+const META = [];
+for (let r = 0; r < ROWS; r++) {
+  const cols = [...Array(COLS).keys()];
+  if (r % 2) cols.reverse();
+  for (const c of cols) META.push([c, r]);
+}
+
+// Centre feature per room (1-based). Rooms without one get an ammo cache (even) or nothing (odd).
+const ROOM_FEATURE = { 3: '1', 5: 'M', 6: '2', 8: 'J', 9: '3', 12: 'Q', 15: 'M' };
+const PROP_SETS = [[], ['T', 'T'], ['S'], ['B'], ['T'], ['S', 'S'], ['B'], ['T', 'S']];
+
+function dungeonRoom(i) {   // i is 1-based; returns ROOM strings of length ROOM
+  const g = Array.from({ length: ROOM }, () => Array(ROOM).fill('.'));
+  for (const [x, z] of [[0, 0], [ROOM - 1, 0], [0, ROOM - 1], [ROOM - 1, ROOM - 1]]) g[z][x] = 'Z';
+  g[1][1] = 'F'; g[ROOM - 2][ROOM - 2] = 'F';     // two braziers
+  const props = PROP_SETS[i % PROP_SETS.length];  // scattered decoration, off the door cells
+  if (props[0]) g[1][ROOM - 2] = props[0];
+  if (props[1]) g[ROOM - 2][1] = props[1];
+  if (i === 1) {
+    g[MID][MID] = 'P';                            // bare starting room, spawns only on the far side
+    g[0][0] = '.'; g[0][ROOM - 1] = '.';
+    g[1][ROOM - 2] = '.'; g[ROOM - 2][1] = '.';
+  } else {
+    g[MID][MID] = ROOM_FEATURE[i] || (i % 2 === 0 ? 'A' : '.');
+  }
+  return g.map(r => r.join(''));
+}
+
+const ROOMS = META.map(([col, row], idx) => ({ at: [col, row], cells: dungeonRoom(idx + 1) }));
+
+// Auto-doors between consecutive rooms.
+const DOORS = [];
+for (let i = 0; i < META.length - 1; i++) {
+  const [c1, r1] = META[i], [c2, r2] = META[i + 1];
+  if (r1 === r2) DOORS.push([(Math.min(c1, c2) + 1) * PITCH, 1 + r1 * PITCH + MID]);
+  else DOORS.push([1 + c1 * PITCH + MID, (Math.min(r1, r2) + 1) * PITCH]);
+}
+
+// The lab, appended just below the last dungeon room.
 const LAB = [
-  'Z.K.K.K.Z',
-  '.........',
-  '..DD.DD..',
-  'K...w...K',
-  '........4',
-  '..D.U.D..',
   'K.......K',
-  '....w....',
-  '........A',
-  '..DD.DD..',
-  'Z.K.w.K.Z',
+  '.D.....D.',
+  'K.......K',
+  'U...w...4',
+  '.........',
+  '....A....',
+  '.........',
+  'A...w...K',
+  'K.......K',
+  '.D.....D.',
+  'Z...w...Z',
 ];
-const GRID_W = 35, GRID_H = 25;
-export const AMMO_COST = 400;
+const LAB_W = LAB[0].length, LAB_H = LAB.length;
+const [lastC, lastR] = META[META.length - 1];
+const lastX0 = 1 + lastC * PITCH, lastBottomWall = (lastR + 1) * PITCH;
+const LAB_X = lastX0 + MID - 3;              // lab column 3 (its entry) lines up under the room centre
+const LAB_Z = lastBottomWall + 1;
+DOORS.push([lastX0 + MID, lastBottomWall]);  // door down into the lab
+
+const GRID_W = Math.max(1 + COLS * PITCH, LAB_X + LAB_W) + 1;
+const GRID_H = LAB_Z + LAB_H + 1;
 
 function buildGrid() {
   const grid = Array.from({ length: GRID_H }, () => Array(GRID_W).fill('#'));
@@ -56,7 +93,7 @@ function buildGrid() {
     const x0 = 1 + r.at[0] * PITCH, z0 = 1 + r.at[1] * PITCH;
     r.cells.forEach((row, dz) => [...row].forEach((ch, dx) => { grid[z0 + dz][x0 + dx] = ch; room[z0 + dz][x0 + dx] = i + 1; }));
   });
-  LAB.forEach((row, dz) => [...row].forEach((ch, dx) => { grid[LAB_Z + dz][LAB_X + dx] = ch; room[LAB_Z + dz][LAB_X + dx] = 10; }));
+  LAB.forEach((row, dz) => [...row].forEach((ch, dx) => { grid[LAB_Z + dz][LAB_X + dx] = ch; room[LAB_Z + dz][LAB_X + dx] = LAB_ROOM; }));
   DOORS.forEach(([x, z], i) => { grid[z][x] = 'door'; room[z][x] = i + 2; });
   return { grid, room };
 }
@@ -148,7 +185,7 @@ export class World {
   }
   // Centre of a room in world units (used for the menu camera).
   roomCenter(n) {
-    if (n === 10) return [(LAB_X + 4.5) * CELL, (LAB_Z + 5.5) * CELL];
+    if (n === LAB_ROOM) return [(LAB_X + LAB_W / 2) * CELL, (LAB_Z + LAB_H / 2) * CELL];
     const r = ROOMS[n - 1];
     return [(1 + r.at[0] * PITCH + MID + 0.5) * CELL, (1 + r.at[1] * PITCH + MID + 0.5) * CELL];
   }
@@ -198,7 +235,7 @@ export class World {
           const room = this.roomOf[cz][cx];
           this.spawns.push({ x, z, room });
           // dungeon rooms: a black pit; the lab: a floor vent
-          const pit = new THREE.Mesh(room === 10 ? ventGeo : pitGeo, pitMat);
+          const pit = new THREE.Mesh(room === LAB_ROOM ? ventGeo : pitGeo, pitMat);
           pit.rotation.x = -Math.PI / 2; pit.position.set(x, 0.012, z);
           scene.add(pit);
           continue;
@@ -300,7 +337,7 @@ export class World {
         } else if (ch === 'M') {
           this._buildMystery(x, z, woodMat, ironMat, goldMat);
         } else if (RACKS[ch]) {
-          this._buildRack(x, z, RACKS[ch], this.roomOf[cz][cx] === 10 ? steelMat : woodMat, ironMat);
+          this._buildRack(x, z, RACKS[ch], this.roomOf[cz][cx] === LAB_ROOM ? steelMat : woodMat, ironMat);
         } else if (PERKS[ch]) {
           this._buildShrine(x, z, PERKS[ch], stoneMat);
         }
@@ -337,7 +374,7 @@ export class World {
 
     // The lab gets its own tiled floor and panelled ceiling laid just over the dungeon ones.
     const lw = LAB[0].length, lh = LAB.length;
-    const [lx, lz] = this.roomCenter(10);
+    const [lx, lz] = this.roomCenter(LAB_ROOM);
     const tile = this._tileTexture();
     tile.wrapS = tile.wrapT = THREE.RepeatWrapping;
     tile.repeat.set(lw, lh);
@@ -356,7 +393,7 @@ export class World {
 
   // ---- doors ----
   _buildDoor(cx, cz, x, z, k) {
-    const lab = k === 9;
+    const lab = k === LAB_ROOM - 1;
     const g = new THREE.Group();
     g.position.set(x, 0, z);
     const slab = new THREE.Mesh(new THREE.BoxGeometry(CELL, WALL_H, CELL * 0.5),
