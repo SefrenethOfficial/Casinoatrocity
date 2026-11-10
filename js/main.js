@@ -63,7 +63,8 @@ class Game {
     this.box = { state: 'idle', t: 0, cycleT: 0, weapon: null, model: null };
     this.resetRun();
 
-    this.admin = { god: false, infAmmo: false, infPoints: false, oneShot: false, startRound: 1 };
+    this.admin = { god: false, infAmmo: false, infPoints: false, oneShot: false, startRound: 1, unlocked: false };
+    try { this.admin.unlocked = localStorage.getItem('casinoatrocity.admin') === '1'; } catch (e) { /* storage off */ }
     this._bindEvents();
     this._bindMenus();
     this.resize();
@@ -553,6 +554,11 @@ class Game {
     });
 
     window.addEventListener('keydown', e => {
+      if (e.code === 'Backquote' && this.admin.unlocked) {
+        e.preventDefault();
+        if (this.screen === 'admin') this._closeAdmin(); else this._openAdmin();
+        return;
+      }
       if (this.state === 'playing') {
         if (e.code === 'Escape' || e.code === 'KeyP') { if (!this.locked || e.code === 'KeyP') { this.unlockPointer(); this.pause(); } return; }
         if (!i.keys.has(e.code)) i.pressed.add(e.code);
@@ -600,7 +606,7 @@ class Game {
       el.addEventListener('click', () => {
         seq.push(el.dataset.ch);
         if (seq.length > 3) seq.shift();
-        if (seq.join('') === 'OCI') { seq.length = 0; this._openAdmin(); }
+        if (seq.join('') === 'OCI') { seq.length = 0; this._unlockAdmin(); this._openAdmin(); }
       });
     });
     const toggle = (k, btn) => { this.admin[k] = !this.admin[k]; btn.classList.toggle('on', this.admin[k]); };
@@ -618,8 +624,26 @@ class Game {
     }
     $('adm-round').value = this.state === 'playing' ? Math.max(1, this.zombies.round) : this.admin.startRound;
     $('adm-msg').textContent = '';
-    this.settingsReturn = this.screen;
+    if (this.state === 'playing') {
+      this.state = 'paused';
+      this.pausedAt = performance.now();
+      this._clearInput();
+      this.unlockPointer();
+      this._adminReturn = 'resume';
+    } else {
+      this._adminReturn = this.screen;
+    }
     this.showScreen('admin');
+  }
+
+  _unlockAdmin() {
+    this.admin.unlocked = true;
+    try { localStorage.setItem('casinoatrocity.admin', '1'); } catch (e) { /* storage off */ }
+  }
+
+  _closeAdmin() {
+    if (this._adminReturn === 'resume') { this._adminReturn = null; this.resume(); }
+    else this.showScreen(this._adminReturn && this._adminReturn !== 'admin' ? this._adminReturn : 'menu');
   }
 
   _adminMsg(t) { $('adm-msg').textContent = t; }
@@ -692,7 +716,7 @@ class Game {
       else if (act === 'quit') this.quitToMenu();
       else if (act === 'settings') { this.settingsReturn = this.screen; this.showScreen('settings'); }
       else if (act === 'settings-back') { writeSave(); this.showScreen(this.settingsReturn); }
-      else if (act === 'admin-back') { this.showScreen('menu'); }
+      else if (act === 'admin-back') { this._closeAdmin(); }
       else if (act === 'menu' || act === 'cases' || act === 'knives' || act === 'armory') {
         if (this.cases.spinning) return;
         if (this.state === 'over') { this.state = 'menu'; this.hud.show(false); this.zombies.reset(); this.zombies.phase = 'idle'; this.resetRun(); }
