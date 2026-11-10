@@ -220,14 +220,63 @@ const BUILDERS = {
     box(g, DARK, 0.008, 0.14, 0.008, -0.03, -0.04, -0.6, 0.2);
     return [0, 0.04, -0.78];
   },
+  // Every knife has its handle around the origin and the blade pointing along -Z.
   knife(g, m) {
-    // blade edge-up, held out in front; a factory knife has a bare steel blade
     const blade = m.skinned ? m.body : STEEL;
-    box(g, m.accent, 0.026, 0.034, 0.11, 0, 0, 0.02);
-    box(g, DARK, 0.05, 0.05, 0.014, 0, 0, -0.04);
-    box(g, blade, 0.008, 0.04, 0.17, 0, 0.004, -0.13);
-    box(g, blade, 0.008, 0.028, 0.05, 0, 0.012, -0.235, 0.35);
-    box(g, DARK, 0.03, 0.04, 0.02, 0, 0, 0.082);
+    switch (m.knifeModel) {
+      case 'cleaver':
+        box(g, m.accent, 0.028, 0.034, 0.11, 0, 0, 0.02);
+        box(g, blade, 0.007, 0.1, 0.17, 0, -0.022, -0.125);
+        box(g, DARK, 0.009, 0.016, 0.016, 0, 0.008, -0.185);
+        break;
+      case 'bayonet':
+        box(g, m.accent, 0.026, 0.032, 0.11, 0, 0, 0.02);
+        box(g, DARK, 0.014, 0.075, 0.014, 0, 0.008, -0.04);
+        box(g, DARK, 0.03, 0.036, 0.02, 0, 0, 0.082);
+        box(g, blade, 0.007, 0.032, 0.24, 0, 0.002, -0.165);
+        box(g, blade, 0.007, 0.022, 0.05, 0, 0.008, -0.3, 0.3);
+        break;
+      case 'machete':
+        box(g, m.accent, 0.028, 0.036, 0.12, 0, 0, 0.02);
+        box(g, blade, 0.007, 0.046, 0.3, 0, 0.004, -0.19);
+        box(g, blade, 0.007, 0.06, 0.09, 0, 0.0, -0.37, 0.12);
+        break;
+      case 'stiletto':
+        box(g, m.accent, 0.02, 0.022, 0.11, 0, 0, 0.02);
+        box(g, DARK, 0.075, 0.012, 0.012, 0, 0, -0.04);
+        box(g, DARK, 0.026, 0.028, 0.016, 0, 0, 0.082);
+        box(g, blade, 0.006, 0.016, 0.26, 0, 0, -0.175);
+        box(g, blade, 0.005, 0.01, 0.04, 0, 0, -0.32);
+        break;
+      case 'karambit': {
+        box(g, m.accent, 0.026, 0.034, 0.1, 0, 0.004, 0.015, 0.15);
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.02, 0.006, 4, 8), DARK);
+        ring.rotation.y = Math.PI / 2; ring.position.set(0, -0.012, 0.085);
+        g.add(ring);
+        // the hooked blade: three segments, each tipped further down
+        box(g, blade, 0.007, 0.036, 0.07, 0, 0.012, -0.06, -0.15);
+        box(g, blade, 0.007, 0.032, 0.065, 0, -0.008, -0.115, -0.6);
+        box(g, blade, 0.007, 0.022, 0.055, 0, -0.044, -0.148, -1.15);
+        break;
+      }
+      case 'butterfly':
+        // two channel handles (with lightening holes) and a slim blade between them
+        box(g, m.accent, 0.016, 0.015, 0.125, 0, 0.011, 0.025);
+        box(g, m.accent, 0.016, 0.015, 0.125, 0, -0.011, 0.025);
+        for (let i = 0; i < 3; i++) box(g, DARK, 0.018, 0.008, 0.012, 0, 0.011, -0.01 + i * 0.035);
+        for (let i = 0; i < 3; i++) box(g, DARK, 0.018, 0.008, 0.012, 0, -0.011, -0.01 + i * 0.035);
+        box(g, DARK, 0.02, 0.034, 0.012, 0, 0, -0.04);
+        box(g, DARK, 0.008, 0.012, 0.02, 0, -0.011, 0.095);
+        box(g, blade, 0.006, 0.024, 0.14, 0, 0, -0.115);
+        box(g, blade, 0.006, 0.016, 0.04, 0, 0.004, -0.2, 0.25);
+        break;
+      default:   // shiv
+        box(g, m.accent, 0.026, 0.034, 0.11, 0, 0, 0.02);
+        box(g, DARK, 0.05, 0.05, 0.014, 0, 0, -0.04);
+        box(g, blade, 0.008, 0.04, 0.17, 0, 0.004, -0.13);
+        box(g, blade, 0.008, 0.028, 0.05, 0, 0.012, -0.235, 0.35);
+        box(g, DARK, 0.03, 0.04, 0.02, 0, 0, 0.082);
+    }
     return [0, 0, -0.26];
   },
   revolver(g, m) {
@@ -248,9 +297,56 @@ export function buildWeaponModel(weaponId, skin = null) {
   const skinObj = typeof skin === 'string' ? SKINS[skin] : skin;
   const mats = skinMaterials(skinObj);
   mats.skinned = !!skinObj;
+  mats.knifeModel = (skinObj && skinObj.model) || 'shiv';
   const muzzle = (BUILDERS[weaponId] || BUILDERS.pistol)(g, mats);
   g.userData.muzzle = new THREE.Vector3(...muzzle);
   g.userData.ownMaterials = [mats.body, mats.accent];
+  return g;
+}
+
+// --- Hands ------------------------------------------------------------------
+// Black-gloved hands for the first-person view. Knuckle pads are a shade lighter so the gloves
+// still read as hands in a dark dungeon.
+const GLOVE = new THREE.MeshLambertMaterial({ color: 0x1b1b1f, emissive: 0x060607 });
+const GLOVE_PAD = new THREE.MeshLambertMaterial({ color: 0x4a4c56, emissive: 0x0a0a0c });
+const SLEEVE = new THREE.MeshLambertMaterial({ color: 0x2c2f3a, emissive: 0x08080a });
+// Where each weapon is held: r = trigger hand on the grip, l = support hand (omit for one-handed).
+const GRIPS = {
+  knife:    { r: [0, 0, 0.022] },
+  pistol:   { r: [0, -0.052, 0.004], l: [-0.022, -0.082, 0.0] },
+  revolver: { r: [0, -0.05, 0.04],   l: [-0.022, -0.082, 0.036] },
+  smg:      { r: [0, -0.05, 0.022],  l: [0, -0.012, -0.225] },
+  shotgun:  { r: [0, -0.04, 0.06],   l: [0, -0.016, -0.36] },
+  ar:       { r: [0, -0.05, 0.062],  l: [0, -0.004, -0.36] },
+  sniper:   { r: [0, -0.045, 0.082], l: [0, -0.014, -0.34] },
+  lmg:      { r: [0, -0.055, 0.082], l: [0, -0.0, -0.38] },
+};
+
+export function buildHands(weaponId) {
+  const g = new THREE.Group();
+  const grip = GRIPS[weaponId] || GRIPS.pistol;
+  // trigger hand: a fist wrapped round the grip, forearm running back and down out of view
+  const r = new THREE.Group();
+  r.position.set(...grip.r);
+  box(r, GLOVE, 0.06, 0.082, 0.068, 0.004, 0, 0);
+  box(r, GLOVE_PAD, 0.064, 0.022, 0.05, 0.004, 0.024, -0.014);
+  box(r, GLOVE, 0.022, 0.03, 0.055, -0.034, 0.03, -0.012);   // thumb over the top
+  const ra = box(r, SLEEVE, 0.07, 0.07, 0.36, 0.045, -0.115, 0.2);
+  ra.rotation.set(0.5, 0.22, 0);
+  box(r, GLOVE, 0.076, 0.076, 0.05, 0.012, -0.045, 0.06, 0.5);   // glove cuff
+  g.add(r);
+  if (grip.l) {
+    // support hand: palm underneath, fingers curling up the far side
+    const l = new THREE.Group();
+    l.position.set(...grip.l);
+    box(l, GLOVE, 0.072, 0.04, 0.09, 0, -0.034, 0);
+    box(l, GLOVE, 0.02, 0.06, 0.085, 0.038, -0.008, 0);
+    box(l, GLOVE_PAD, 0.024, 0.02, 0.07, 0.04, 0.022, 0);
+    box(l, GLOVE, 0.022, 0.05, 0.03, -0.04, -0.012, 0.03);    // thumb
+    const la = box(l, SLEEVE, 0.07, 0.07, 0.38, -0.11, -0.115, 0.17);
+    la.rotation.set(0.4, -0.6, 0);
+    g.add(l);
+  }
   return g;
 }
 

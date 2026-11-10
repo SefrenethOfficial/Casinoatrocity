@@ -13,7 +13,7 @@ export const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
 export const WEAPONS = {
   // The knife is always carried. Holding it is the only way to move fast.
   knife: {
-    name: 'Shiv', melee: true, auto: true, rpm: 135, damage: 170, heavyDamage: 480, pellets: 0, headMult: 1,
+    name: 'Knife', melee: true, auto: true, rpm: 135, damage: 170, heavyDamage: 480, pellets: 0, headMult: 1,
     mag: 0, reserve: 0, reload: 0, spread: 0, adsSpread: 0, recoil: 0,
     hip: [0.2, -0.16, -0.34], ads: [0.2, -0.16, -0.34], adsFov: 1, sound: 'slash', pierce: 1, mobility: 1.75,
   },
@@ -61,6 +61,14 @@ export const BOX_POOL = ['smg', 'shotgun', 'ar', 'ar', 'sniper', 'sniper', 'lmg'
 const S = (id, weapon, name, rarity, pattern, c1, c2, accent) =>
   ({ id, weapon, name, rarity, pattern, c1, c2, accent: accent || c2 });
 
+// Knife types. Purely cosmetic: every knife handles the same.
+export const KNIFE_MODELS = {
+  shiv: 'Shiv', cleaver: 'Cleaver', bayonet: 'Bayonet', machete: 'Machete',
+  stiletto: 'Stiletto', karambit: 'Karambit', butterfly: 'Butterfly Knife',
+};
+const K = (id, model, name, rarity, pattern, c1, c2, accent) =>
+  ({ id, weapon: 'knife', model, name, rarity, pattern, c1, c2, accent: accent || c2 });
+
 export const SKIN_LIST = [
   S('p_felt',  'pistol', 'Felt Green',    'common',    'solid',   '#1f6b3a', '#1f6b3a', '#2a2218'),
   S('p_chips', 'pistol', 'Chip Stack',    'uncommon',  'stripes', '#c0392b', '#f1ede4', '#1a1a1a'),
@@ -104,12 +112,51 @@ export const SKIN_LIST = [
   S('r_neon',  'revolver', 'Slot Fever',        'epic',      'neon',  '#1a0610', '#ff3355', '#2a0a18'),
   S('r_gold',  'revolver', 'Jackpot Royale',    'legendary', 'gold',  '#ffd65e', '#a8740a', '#7a0f1c'),
 
-  S('k_bone',  'knife', 'Bone Saw',           'rare',      'solid', '#d8ceb0', '#d8ceb0', '#3a2412'),
-  S('k_blood', 'knife', 'Bloodletter',        'epic',      'camo',  '#7a0a10', '#3a0206', '#141414'),
-  S('k_neon',  'knife', 'Last Rites',         'epic',      'neon',  '#0c0a14', '#ff2bd6', '#1a1026'),
-  S('k_gold',  'knife', 'Gilded Fang',        'legendary', 'gold',  '#ffd65e', '#a8740a', '#4a0b12'),
+  // ---- Knives. Each knife skin is a knife *type* (its own model) plus a finish. ----
+  K('k_bone',   'shiv',      'Bone Saw',       'rare',      'solid',   '#d8ceb0', '#d8ceb0', '#3a2412'),
+  K('k_blood',  'shiv',      'Bloodletter',    'epic',      'camo',    '#7a0a10', '#3a0206', '#141414'),
+  K('k_neon',   'shiv',      'Last Rites',     'epic',      'neon',    '#0c0a14', '#ff2bd6', '#1a1026'),
+  K('k_gold',   'shiv',      'Gilded Fang',    'legendary', 'gold',    '#ffd65e', '#a8740a', '#4a0b12'),
+
+  K('kc_rust',  'cleaver',   'Rust Bucket',    'common',    'camo',    '#7a4a2e', '#4a2a18', '#3a2412'),
+  K('kc_steel', 'cleaver',   "Butcher's Steel", 'common',   'solid',   '#a8adb6', '#a8adb6', '#2a1a12'),
+  K('kc_blood', 'cleaver',   'Prime Cut',      'uncommon',  'camo',    '#b0b4bc', '#7a0a10', '#4a0b12'),
+  K('kc_gold',  'cleaver',   'Golden Chop',    'epic',      'gold',    '#ffd65e', '#a8740a', '#2a1a12'),
+
+  K('kb_trench','bayonet',   'Trench',         'common',    'solid',   '#3a3d36', '#3a3d36', '#4a3a22'),
+  K('kb_parade','bayonet',   'Parade',         'uncommon',  'stripes', '#c8ccd4', '#27408b', '#141414'),
+  K('kb_check', 'bayonet',   'House Rules',    'rare',      'checker', '#b3121d', '#141414', '#1f6b3a'),
+  K('kb_gold',  'bayonet',   'Field Marshal',  'epic',      'gold',    '#ffcf4a', '#27408b', '#0e1a3d'),
+
+  K('km_jungle','machete',   'Overgrowth',     'common',    'camo',    '#4a6a3a', '#2a3d22', '#3a2412'),
+  K('km_rust',  'machete',   'Old Faithful',   'uncommon',  'camo',    '#8a8f98', '#6a4428', '#2a1a12'),
+  K('km_stripe','machete',   'Red Line',       'rare',      'stripes', '#141414', '#d1123b', '#141414'),
+  K('km_neon',  'machete',   'Night Harvest',  'epic',      'neon',    '#07140c', '#3dff7a', '#0c2014'),
+
+  K('ks_black', 'stiletto',  'Black Tie',      'uncommon',  'solid',   '#1c1c22', '#1c1c22', '#c9a227'),
+  K('ks_ivory', 'stiletto',  'Ivory',          'rare',      'solid',   '#c8ccd4', '#c8ccd4', '#efe6cf'),
+  K('ks_suits', 'stiletto',  'Card Sharp',     'rare',      'suits',   '#f1ede4', '#b3121d', '#141414'),
+  K('ks_gold',  'stiletto',  'Kingmaker',      'legendary', 'gold',    '#ffd65e', '#a8740a', '#7a0f1c'),
+
+  K('kk_steel', 'karambit',  'Talon',          'rare',      'solid',   '#9aa0aa', '#9aa0aa', '#141414'),
+  K('kk_blood', 'karambit',  'Red Claw',       'epic',      'camo',    '#8a0a12', '#3a0206', '#141414'),
+  K('kk_neon',  'karambit',  'Viper',          'epic',      'neon',    '#06140a', '#b6ff3a', '#101a0a'),
+  K('kk_gold',  'karambit',  'Dragon Claw',    'legendary', 'gold',    '#ffd65e', '#b3121d', '#141414'),
+
+  K('kf_steel', 'butterfly', 'Flick',          'rare',      'solid',   '#a8adb6', '#a8adb6', '#2a2c33'),
+  K('kf_check', 'butterfly', 'Double Down',    'epic',      'checker', '#e8e4da', '#141414', '#b3121d'),
+  K('kf_neon',  'butterfly', 'Afterglow',      'legendary', 'neon',    '#0b1220', '#21e6ff', '#101828'),
+  K('kf_gold',  'butterfly', 'High Society',   'legendary', 'gold',    '#ffd65e', '#a8740a', '#141414'),
 ];
 export const SKINS = Object.fromEntries(SKIN_LIST.map(s => [s.id, s]));
+
+// What to call the weapon a skin belongs to ("AK-Ace", "Karambit", ...).
+export function skinWeaponName(skin) {
+  return skin.weapon === 'knife' ? KNIFE_MODELS[skin.model] : WEAPONS[skin.weapon].name;
+}
+const knivesOf = (models, rarities) => SKIN_LIST
+  .filter(s => s.weapon === 'knife' && models.includes(s.model) && (!rarities || rarities.includes(s.rarity)))
+  .map(s => s.id);
 
 const skinsFor = (weapons, rarities) => SKIN_LIST
   .filter(s => weapons.includes(s.weapon) && (!rarities || rarities.includes(s.rarity)))
@@ -118,22 +165,41 @@ const skinsFor = (weapons, rarities) => SKIN_LIST
 // odds are relative weights per rarity (they sum to 100 for readability).
 export const CASES = [
   {
-    id: 'low', name: 'Low Roller Case', price: 250, color: '#4b8dff',
+    id: 'low', kind: 'guns', name: 'Low Roller Case', price: 250, color: '#4b8dff',
     blurb: 'Sidearms, SMGs and shotguns.',
     skins: skinsFor(['pistol', 'smg', 'shotgun']),
     odds: { common: 58, uncommon: 27, rare: 11, epic: 3.2, legendary: 0.8 },
   },
   {
-    id: 'high', name: 'High Roller Case', price: 600, color: '#a05bff',
+    id: 'high', kind: 'guns', name: 'High Roller Case', price: 600, color: '#a05bff',
     blurb: 'Rifles, snipers, LMGs and a revolver grip.',
     skins: [...skinsFor(['ar', 'sniper', 'lmg']), 'r_ivory'],
     odds: { common: 40, uncommon: 32, rare: 19, epic: 7, legendary: 2 },
   },
   {
-    id: 'jackpot', name: 'Jackpot Case', price: 1500, color: '#ffc93c',
-    blurb: 'Rare or better, every weapon. Knives live here.',
-    skins: skinsFor(WEAPON_ORDER, ['rare', 'epic', 'legendary']),
+    id: 'jackpot', kind: 'guns', name: 'Jackpot Case', price: 1500, color: '#ffc93c',
+    blurb: 'Rare or better, every gun.',
+    skins: skinsFor(WEAPON_ORDER.filter(w => w !== 'knife'), ['rare', 'epic', 'legendary']),
     odds: { rare: 62, epic: 28, legendary: 10 },
+  },
+  // Knife crates have their own menu.
+  {
+    id: 'k_rusty', kind: 'knives', name: 'Rusty Crate', price: 400, color: '#8fa3b8',
+    blurb: 'Cleavers, bayonets and machetes.',
+    skins: knivesOf(['cleaver', 'bayonet', 'machete']),
+    odds: { common: 50, uncommon: 30, rare: 14, epic: 6 },
+  },
+  {
+    id: 'k_cut', kind: 'knives', name: 'Cutthroat Crate', price: 900, color: '#a05bff',
+    blurb: 'Stilettos and shivs, with a shot at a karambit or butterfly knife.',
+    skins: [...knivesOf(['stiletto', 'shiv']), 'kk_steel', 'kf_steel', 'km_stripe', 'kb_check'],
+    odds: { uncommon: 34, rare: 46, epic: 16, legendary: 4 },
+  },
+  {
+    id: 'k_relic', kind: 'knives', name: 'Reliquary Crate', price: 2200, color: '#ffc93c',
+    blurb: 'Karambits and butterfly knives, plus every legendary blade.',
+    skins: [...new Set([...knivesOf(['karambit', 'butterfly']), ...knivesOf(Object.keys(KNIFE_MODELS), ['legendary'])])],
+    odds: { rare: 48, epic: 36, legendary: 16 },
   },
 ];
 

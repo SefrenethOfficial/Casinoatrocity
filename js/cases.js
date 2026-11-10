@@ -1,5 +1,5 @@
 // Weapon case opening (spinning reel) and the armory where skins are equipped or sold.
-import { CASES, SKINS, RARITIES, RARITY_ORDER, WEAPONS, WEAPON_ORDER, caseChances, rollCase } from './data.js';
+import { CASES, SKINS, RARITIES, RARITY_ORDER, WEAPONS, WEAPON_ORDER, KNIFE_MODELS, caseChances, rollCase, skinWeaponName } from './data.js';
 import { save, writeSave, addSkin, sellItem, equipSkin, ownsSkin } from './save.js';
 import { weaponIcon } from './models.js';
 
@@ -13,13 +13,14 @@ function itemCard(skin, extra = '') {
   el.className = 'item';
   el.style.setProperty('--rc', r.color);
   el.innerHTML = `<span class="rr">${r.name}</span><img alt="" src="${weaponIcon(skin.weapon, skin.id)}">
-    <span class="wn">${WEAPONS[skin.weapon].name}</span><span class="sn">${skin.name}</span>${extra}`;
+    <span class="wn">${skinWeaponName(skin)}</span><span class="sn">${skin.name}</span>${extra}`;
   return el;
 }
 
 export class CaseUI {
   constructor(game) {
     this.game = game;
+    this.kind = 'guns';      // which menu is open: 'guns' (Weapon Cases) or 'knives' (Knife Crates)
     this.selected = CASES[0];
     this.spinning = false;
     this.armoryWeapon = 'pistol';
@@ -40,9 +41,14 @@ export class CaseUI {
   // ---- Cases screen ----
   showCases() {
     this.refreshChips();
+    const knives = this.kind === 'knives';
+    const shown = CASES.filter(c => c.kind === this.kind);
+    if (!shown.includes(this.selected)) this.selected = shown[0];
+    $('cases-title').textContent = knives ? 'Knife Crates' : 'Weapon Cases';
+    $('contents-title').textContent = knives ? 'In this crate' : 'In this case';
     const list = $('case-list');
     list.innerHTML = '';
-    for (const c of CASES) {
+    for (const c of shown) {
       const ch = caseChances(c);
       const b = document.createElement('button');
       b.className = 'case-card' + (c === this.selected ? ' sel' : '');
@@ -147,7 +153,7 @@ export class CaseUI {
     const res = $('result');
     res.innerHTML = `<img alt="" src="${weaponIcon(skin.weapon, skin.id)}">
       <div class="ttl">${skin.name}</div>
-      <div class="sub">${WEAPONS[skin.weapon].name}${copies > 1 ? ` • duplicate (you own ${copies})` : ''}</div>
+      <div class="sub">${skinWeaponName(skin)}${copies > 1 ? ` • duplicate (you own ${copies})` : ''}</div>
       <div class="btns"><button class="btn small" id="res-equip">Equip</button>
       <button class="btn small" id="res-sell">Sell for ${r.sell}</button>
       <button class="btn small primary" id="res-again">Open another — ${c.price}</button>
@@ -189,14 +195,14 @@ export class CaseUI {
       const n = save.inventory.filter(it => SKINS[it.skin].weapon === w).length;
       const b = document.createElement('button');
       b.className = 'tab' + (w === this.armoryWeapon ? ' sel' : '');
-      b.innerHTML = `<span class="nm">${WEAPONS[w].name}</span><span class="ct">${n} skin${n === 1 ? '' : 's'}</span>`;
+      b.innerHTML = `<span class="nm">${w === 'knife' ? 'Knives' : WEAPONS[w].name}</span><span class="ct">${n} owned</span>`;
       b.addEventListener('click', () => { this.armoryWeapon = w; this.showArmory(); });
       tabs.appendChild(b);
     }
     const w = this.armoryWeapon, def = WEAPONS[w], eq = save.equipped[w] || null;
     const eqSkin = eq ? SKINS[eq] : null;
     $('armory-preview').innerHTML = `<img alt="" src="${weaponIcon(w, eq)}">
-      <div><div class="ttl">${def.name}</div>
+      <div><div class="ttl">${w === 'knife' ? KNIFE_MODELS[(eqSkin && eqSkin.model) || 'shiv'] : def.name}</div>
       <div class="sub">${eqSkin ? `${eqSkin.name} • ${RARITIES[eqSkin.rarity].name}` : 'Factory finish'}</div>
       <dl><dt>Damage</dt><dd>${def.melee ? `${def.damage} slash / ${def.heavyDamage} stab` : def.damage + (def.pellets > 1 ? ' × ' + def.pellets : '')}</dd>
       ${def.melee ? '' : `<dt>Fire rate</dt><dd>${def.rpm} rpm${def.auto ? ' auto' : ''}</dd><dt>Magazine</dt><dd>${def.mag} / ${def.reserve}</dd>`}
@@ -209,7 +215,7 @@ export class CaseUI {
     def0.className = 'item own' + (eq ? '' : ' eq');
     def0.style.setProperty('--rc', '#666');
     def0.innerHTML = `<span class="rr">Default</span><img alt="" src="${weaponIcon(w, null)}">
-      <span class="wn">${def.name}</span><span class="sn">Factory finish</span>`;
+      <span class="wn">${w === 'knife' ? 'Shiv' : def.name}</span><span class="sn">${w === 'knife' ? 'Standard issue' : 'Factory finish'}</span>`;
     def0.addEventListener('click', () => { equipSkin(w, null); this.showArmory(); });
     grid.appendChild(def0);
 
@@ -232,7 +238,7 @@ export class CaseUI {
     if (!items.length) {
       const note = document.createElement('div');
       note.className = 'empty-note';
-      note.textContent = 'No skins for this weapon yet. Open weapon cases to find some.';
+      note.textContent = w === 'knife' ? 'No other knives yet. Open knife crates to find some.' : 'No skins for this weapon yet. Open weapon cases to find some.';
       grid.appendChild(note);
     }
   }

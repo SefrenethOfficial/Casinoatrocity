@@ -550,20 +550,23 @@ class Game {
   }
 
   _bindMenus() {
+    // every button gets the interface click
+    document.addEventListener('click', e => { if (e.target.closest('button')) { this.audio.unlock(); this.audio.click(); } }, true);
     document.addEventListener('click', e => {
       const btn = e.target.closest('[data-act]');
       if (!btn) return;
       this.audio.unlock();
       const act = btn.dataset.act;
+      if (act === 'knives' || act === 'cases') this.cases.kind = act === 'knives' ? 'knives' : 'guns';
       if (act === 'play') this.startZombies();
       else if (act === 'resume') this.resume();
       else if (act === 'quit') this.quitToMenu();
       else if (act === 'settings') { this.settingsReturn = this.screen; this.showScreen('settings'); }
       else if (act === 'settings-back') { writeSave(); this.showScreen(this.settingsReturn); }
-      else if (act === 'menu' || act === 'cases' || act === 'armory') {
+      else if (act === 'menu' || act === 'cases' || act === 'knives' || act === 'armory') {
         if (this.cases.spinning) return;
         if (this.state === 'over') { this.state = 'menu'; this.hud.show(false); this.zombies.reset(); this.zombies.phase = 'idle'; this.resetRun(); }
-        this.showScreen(act);
+        this.showScreen(act === 'knives' ? 'cases' : act);
       }
     });
     $('set-sens').addEventListener('input', e => { save.settings.sens = parseFloat(e.target.value); this._syncSettings(); });

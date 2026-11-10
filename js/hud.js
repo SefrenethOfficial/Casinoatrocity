@@ -90,15 +90,15 @@ export class Hud {
     if (s) {
       this.set('ammo-mag', def.melee ? '\u2014' : String(s.mag));
       this.set('ammo-res', def.melee ? '' : '/ ' + s.reserve);
-      this.set('weapon-name', weapons.reloading ? 'Reloading…' : def.name);
+      this.set('weapon-name', weapons.reloading ? 'Reloading…' : weapons.displayName);
       const low = !def.melee && s.mag <= Math.ceil(def.mag * 0.25);
       if (this.cache.low !== low) { this.cache.low = low; $('ammo').classList.toggle('low', low); }
-      const slotKey = weapons.slots.map(x => x.id).join(',') + weapons.cur + weapons.knifeOut;
+      const slotKey = weapons.slots.map(x => x.id).join(',') + weapons.cur + weapons.knifeOut + weapons.knifeName;
       if (this.cache.slots !== slotKey) {
         this.cache.slots = slotKey;
         $('slots').innerHTML = weapons.slots.map((x, i) =>
           `<span class="${i === weapons.cur && !weapons.knifeOut ? 'on' : ''}">${i + 1} ${WEAPONS[x.id].name}</span>`).join('')
-          + `<span class="${weapons.knifeOut ? 'on' : ''}">3 ${WEAPONS.knife.name}</span>`;
+          + `<span class="${weapons.knifeOut ? 'on' : ''}">3 ${weapons.knifeName}</span>`;
       }
       // crosshair: spreads with bloom/movement, hidden while aiming
       const gap = Math.round(6 + (def.spread * 260) + weapons.bloom * 400 + Math.min(player.speed2d, 7) * 1.2);

@@ -1,14 +1,17 @@
 // All sound is synthesised with WebAudio, so the game ships with no audio files.
 
+// rate/vol shape the recorded gunshot per weapon; the synth values are the fallback if it can't load.
 const SHOTS = {
-  pistol:   { dur: 0.16, freq: 1900, q: 0.8, gain: 0.55, thump: 190, thumpGain: 0.5 },
-  smg:      { dur: 0.11, freq: 2400, q: 0.9, gain: 0.42, thump: 220, thumpGain: 0.3 },
-  ar:       { dur: 0.17, freq: 1500, q: 0.7, gain: 0.55, thump: 150, thumpGain: 0.55 },
-  lmg:      { dur: 0.19, freq: 1200, q: 0.7, gain: 0.58, thump: 130, thumpGain: 0.6 },
-  shotgun:  { dur: 0.34, freq: 900,  q: 0.5, gain: 0.8,  thump: 100, thumpGain: 0.9 },
-  sniper:   { dur: 0.5,  freq: 1100, q: 0.5, gain: 0.85, thump: 90,  thumpGain: 1.0 },
-  revolver: { dur: 0.42, freq: 1300, q: 0.6, gain: 0.8,  thump: 110, thumpGain: 0.95 },
+  pistol:   { rate: 1.0,  vol: 0.9,  dur: 0.16, freq: 1900, q: 0.8, gain: 0.55, thump: 190, thumpGain: 0.5 },
+  smg:      { rate: 1.3,  vol: 0.7,  dur: 0.11, freq: 2400, q: 0.9, gain: 0.42, thump: 220, thumpGain: 0.3 },
+  ar:       { rate: 0.88, vol: 0.9,  dur: 0.17, freq: 1500, q: 0.7, gain: 0.55, thump: 150, thumpGain: 0.55 },
+  lmg:      { rate: 0.78, vol: 0.95, dur: 0.19, freq: 1200, q: 0.7, gain: 0.58, thump: 130, thumpGain: 0.6 },
+  shotgun:  { rate: 0.6,  vol: 1.0,  dur: 0.34, freq: 900,  q: 0.5, gain: 0.8,  thump: 100, thumpGain: 0.9, boom: true },
+  sniper:   { rate: 0.52, vol: 1.0,  dur: 0.5,  freq: 1100, q: 0.5, gain: 0.85, thump: 90,  thumpGain: 1.0, boom: true },
+  revolver: { rate: 0.7,  vol: 1.0,  dur: 0.42, freq: 1300, q: 0.6, gain: 0.8,  thump: 110, thumpGain: 0.95, boom: true },
 };
+const SAMPLES = { shot: 'assets/sfx/shot.mp3', click: 'assets/sfx/click.mp3' };
+const SHOT_LEAD_IN = 0.06;   // the gunshot recording starts with a short silence
 
 export class AudioSys {
   constructor() {
@@ -16,6 +19,7 @@ export class AudioSys {
     this.master = null;
     this.volume = 0.7;
     this.noise = null;
+    this.samples = {};
   }
 
   // Must be called from a user gesture at least once.
@@ -32,6 +36,7 @@ export class AudioSys {
       this.master.connect(comp);
       comp.connect(this.ctx.destination);
       const len = this.ctx.sampleRate;
+      for (const name in SAMPLES) this._load(name, SAMPLES[name]);
       this.noise = this.ctx.createBuffer(1, len, len);
       const d = this.noise.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
@@ -77,8 +82,33 @@ export class AudioSys {
     o.start(t); o.stop(t + dur + 0.02);
   }
 
+  _load(name, url) {
+    fetch(url).then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(r.status))))
+      .then(data => this.ctx.decodeAudioData(data))
+      .then(buf => { this.samples[name] = buf; })
+      .catch(() => { /* fall back to synthesised sound */ });
+  }
+
+  // Plays a recorded sample. Returns false if it isn't available so callers can fall back.
+  _sample(name, rate, gain, offset = 0) {
+    const buf = this.samples[name];
+    if (!buf || !this.ok) return false;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = rate;
+    const g = this.ctx.createGain();
+    g.gain.value = gain;
+    src.connect(g); g.connect(this.master);
+    src.start(0, offset);
+    return true;
+  }
+
   shot(kind) {
     const s = SHOTS[kind] || SHOTS.pistol;
+    if (this._sample('shot', s.rate * (0.96 + Math.random() * 0.08), s.vol, SHOT_LEAD_IN)) {
+      if (s.boom) this._tone('sine', s.thump, s.thump * 0.35, s.dur * 0.8, s.thumpGain * 0.8);   // extra weight for the big guns
+      return;
+    }
     this._noise(s.dur, 'bandpass', s.freq, s.q, s.gain, 0, s.freq * 0.35);
     this._noise(s.dur * 0.5, 'highpass', 3500, 0.5, s.gain * 0.35);
     this._tone('sine', s.thump, s.thump * 0.35, s.dur * 0.8, s.thumpGain);
@@ -116,7 +146,8 @@ export class AudioSys {
   zombieSwing() { this._noise(0.18, 'bandpass', 700, 1.5, 0.22, 0, 250); }
   buy() { [988, 1319, 1568].forEach((f, i) => this._tone('triangle', f, f, 0.12, 0.2, i * 0.06)); }
   deny() { this._tone('square', 180, 140, 0.16, 0.15); }
-  tick() { this._tone('square', 1300, 900, 0.025, 0.09); }
+  tick() { if (!this._sample('click', 1.2, 0.5)) this._tone('square', 1300, 900, 0.025, 0.09); }
+  click() { this._sample('click', 1, 0.7); }
   powerup() { [523, 659, 784, 1047].forEach((f, i) => this._tone('triangle', f, f, 0.16, 0.22, i * 0.07)); }
   roundStart() {
     [196, 185, 174, 147].forEach((f, i) => this._tone('sawtooth', f, f * 0.98, 0.5, 0.2, i * 0.32));

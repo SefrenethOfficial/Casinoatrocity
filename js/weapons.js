@@ -1,7 +1,7 @@
 // Player weapon handling: view model, firing, reloading, recoil, and the knife.
 import * as THREE from 'three';
-import { WEAPONS } from './data.js';
-import { buildWeaponModel, disposeWeaponModel, canvasTexture } from './models.js';
+import { WEAPONS, KNIFE_MODELS } from './data.js';
+import { buildWeaponModel, buildHands, disposeWeaponModel, canvasTexture } from './models.js';
 import { equippedSkin } from './save.js';
 
 const V1 = new THREE.Vector3(), V2 = new THREE.Vector3(), V3 = new THREE.Vector3(), V4 = new THREE.Vector3();
@@ -59,6 +59,9 @@ export class WeaponSystem {
   get slot() { return this.knifeOut ? this.knife : this.slots[this.cur]; }
   get def() { const s = this.slot; return s ? WEAPONS[s.id] : null; }
   get reloading() { return this.reloadT > 0; }
+  // Name shown on the HUD: the gun's name, or whichever knife type is equipped.
+  get displayName() { return this.knifeOut ? KNIFE_MODELS[this.knifeModel || 'shiv'] : this.def.name; }
+  get knifeName() { const s = equippedSkin('knife'); return KNIFE_MODELS[(s && s.model) || 'shiv']; }
 
   reset() {
     this.slots = [];
@@ -104,6 +107,7 @@ export class WeaponSystem {
     if (this.knifeOut) return;
     this.knifeOut = true;
     this._drew(0.22);   // the knife comes out fast
+    if (this.knifeModel === 'butterfly') this.switchT = this.switchDur = 0.42;   // time for the flip
   }
   // Cycle through gun 1, gun 2, knife.
   next(dir = 1) {
@@ -127,6 +131,11 @@ export class WeaponSystem {
     const id = this.slot.id;
     this.model = buildWeaponModel(id, equippedSkin(id));
     this.holder.add(this.model);
+    if (this.hands) { this.holder.remove(this.hands); disposeWeaponModel(this.hands); }
+    this.hands = buildHands(id);
+    this.holder.add(this.hands);
+    const skin = equippedSkin(id);
+    this.knifeModel = id === 'knife' ? ((skin && skin.model) || 'shiv') : null;
     this.flashMesh.position.copy(this.model.userData.muzzle);
     this.flashMesh.position.z -= 0.06;
     this.flashMesh.visible = false;
@@ -333,6 +342,7 @@ export class WeaponSystem {
     if (this.switchT > 0) {
       const k = this.switchT / this.switchDur;
       y -= k * 0.3; rx -= k * 0.8;
+      if (this.knifeOut && this.knifeModel === 'butterfly') rz += k * Math.PI * 4;   // butterfly flourish on the draw
     }
     if (this.meleeT > 0) {
       const p = 1 - this.meleeT / this.meleeDur;   // 0 -> 1 through the swing

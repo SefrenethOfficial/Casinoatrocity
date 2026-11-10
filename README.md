@@ -13,7 +13,9 @@ A PSX-styled browser FPS built with [three.js](https://threejs.org/). Survive ro
 - **Seven guns** — pistol, SMG, shotgun, assault rifle, sniper, LMG and a golden revolver.
 - **Weapon racks, the Mystery Slot and shrines** — spend points mid-run on guns, ammo, a random weapon, double health or faster reloads.
 - **Power-up drops** — Max Ammo, Double Points, Insta-Kill and Chip Bonus.
-- **Weapon cases** — three cases, a full-screen spinning reel, five rarities and 39 skins including knives. Equip skins in the Armory or sell them back for chips.
+- **Weapon cases** — three cases, a full-screen spinning reel, five rarities and 35 gun skins. Equip skins in the Armory or sell them back for chips.
+- **Knife crates** — a separate menu with three crates and 28 knives across seven types: shiv, cleaver, bayonet, machete, stiletto, karambit and butterfly knife (which flips open when you draw it). Knives are cosmetic; they all handle the same.
+- **Gloved hands** — the first-person view shows black-gloved hands holding each weapon.
 - Chips, skins, settings and your best round are saved in your browser (localStorage). Chips are in-game only.
 
 ## Controls
@@ -47,6 +49,10 @@ Then open http://localhost:8000.
 
 After changing anything in `js/` or `css/`, bump the `BUILD` number near the top of `index.html`. It is added to every script and stylesheet address so browsers fetch the new files instead of reusing cached ones.
 
+## Credits
+
+Gunshot and interface click sounds are in `assets/sfx/` (by dev_guy and amaze98). Every other sound is synthesised in the browser.
+
 ## Project layout
 
 - `index.html`, `css/style.css` — page, menus and HUD
@@ -57,4 +63,5 @@ After changing anything in `js/` or `css/`, bump the `BUILD` number near the top
 - `js/gore.js` — blood, gibs, decals and bullet effects
 - `js/cases.js`, `js/data.js`, `js/save.js` — cases, skins, weapon stats, saved progress
 - `js/models.js`, `js/audio.js` — procedural gun models and synthesised sound
+- `assets/sfx/` — recorded gunshot and click
 - `lib/` — three.js (MIT licence)

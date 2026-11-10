@@ -11,7 +11,7 @@
     // new files after an update. Bump BUILD whenever anything in js/ or css/ changes: every game
     // file is then requested under a new address, so nobody is left running a stale copy.
     (function () {
-      var BUILD = '3';
+      var BUILD = '4';
       var files = ['audio', 'cases', 'data', 'gore', 'hud', 'main', 'models', 'player', 'psx', 'save', 'weapons', 'world', 'zombies'];
       var imports = { three: './lib/three.module.js' };
       files.forEach(function (f) { imports['./js/' + f + '.js'] = './js/' + f + '.js?v=' + BUILD; });
@@ -64,6 +64,7 @@
       <nav class="menu-nav">
         <button class="btn primary" data-act="play">Play Zombies</button>
         <button class="btn" data-act="cases">Weapon Cases</button>
+        <button class="btn" data-act="knives">Knife Crates</button>
         <button class="btn" data-act="armory">Armory</button>
         <button class="btn" data-act="settings">Settings</button>
       </nav>
@@ -84,7 +85,7 @@
   <section id="screen-cases" class="screen hidden">
     <header class="bar">
       <button class="btn small" data-act="menu">&larr; Back</button>
-      <h2>Weapon Cases</h2>
+      <h2 id="cases-title">Weapon Cases</h2>
       <div class="balance"><span class="chip-ico"></span><b data-chips>0</b></div>
     </header>
     <div class="cases-body">
@@ -95,7 +96,7 @@
           <label class="check"><input type="checkbox" id="fast-open"> Quick spin</label>
           <span id="case-msg"></span>
         </div>
-        <h3 class="contents-title">In this case</h3>
+        <h3 class="contents-title" id="contents-title">In this case</h3>
         <div id="case-contents" class="grid"></div>
       </div>
     </div>
