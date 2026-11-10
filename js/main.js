@@ -25,6 +25,44 @@ const POWERUPS = {
 };
 const V = new THREE.Vector3();
 
+// Falling rain for the outdoor lawn: a box of streaks that follows the camera and recycles.
+class Rain {
+  constructor(scene) {
+    this.N = 520;
+    this.area = 28; this.top = 11; this.bottom = -3;
+    this.pos = new Float32Array(this.N * 6);
+    this.vel = new Float32Array(this.N);
+    for (let i = 0; i < this.N; i++) this._seed(i, Math.random() * (this.top - this.bottom) + this.bottom);
+    this.geo = new THREE.BufferGeometry();
+    this.geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
+    this.mesh = new THREE.LineSegments(this.geo,
+      new THREE.LineBasicMaterial({ color: 0xa6b8d8, transparent: true, opacity: 0.45 }));
+    this.mesh.frustumCulled = false;
+    this.mesh.visible = false;
+    scene.add(this.mesh);
+  }
+  _seed(i, y) {
+    const o = i * 6, x = (Math.random() - 0.5) * this.area, z = (Math.random() - 0.5) * this.area;
+    const len = 0.6 + Math.random() * 0.7;
+    this.pos[o] = x; this.pos[o + 1] = y; this.pos[o + 2] = z;
+    this.pos[o + 3] = x + 0.05; this.pos[o + 4] = y - len; this.pos[o + 5] = z;
+    this.vel[i] = 26 + Math.random() * 18;
+  }
+  reset() { this.mesh.visible = false; }
+  update(dt, cam, on) {
+    this.mesh.visible = on;
+    if (!on) return;
+    this.mesh.position.set(cam.x, cam.y, cam.z);
+    const p = this.pos, span = this.top - this.bottom;
+    for (let i = 0; i < this.N; i++) {
+      const o = i * 6, d = this.vel[i] * dt;
+      p[o + 1] -= d; p[o + 4] -= d;
+      if (p[o + 1] < this.bottom) { p[o + 1] += span; p[o + 4] += span; }
+    }
+    this.geo.attributes.position.needsUpdate = true;
+  }
+}
+
 class Game {
   constructor() {
     loadSave();
@@ -45,6 +83,8 @@ class Game {
     this.audio.setVolume(save.settings.volume);
     this.world = new World(this.scene);
     this.effects = new Effects(this.scene, this.world);
+    this.rain = new Rain(this.scene);
+    this.stormT = 3 + Math.random() * 5;
     this.player = new Player(this);
     this.weapons = new WeaponSystem(this);
     this.zombies = new ZombieDirector(this);
@@ -83,14 +123,14 @@ class Game {
     this.perks = new Set();
     this.perkHtml = '';
     this.promptHtml = '';
-    this.doorHint = false;
     this.dropsThisRound = 0;
     for (const d of this.drops) this.scene.remove(d.mesh);
     this.drops.length = 0;
     this._setBoxModel(null);
     this.box.state = 'idle';
     this.effects.clear();
-    this.world.resetDoors();
+    this.world.resetBarriers();
+    this.rain.reset();
   }
 
   startZombies() {
@@ -194,16 +234,8 @@ class Game {
     this.addChips(bonus);
     save.bestRound = Math.max(save.bestRound, round);
     writeSave();
-    // each cleared wave opens the next door; the ninth opens the lab
-    const opened = this.world.openDoor(round);
-    const sub = !opened ? `+${bonus} chips` : round === LAB_ROOM - 1 ? `+${bonus} chips \u2022 the lab is open` : `+${bonus} chips \u2022 a door grinds open`;
-    this.hud.announce('ROUND CLEARED', sub, 3.6);
+    this.hud.announce('ROUND ' + round + ' CLEARED', `+${bonus} chips`, 3.2);
     this.audio.roundEnd();
-    if (opened) {
-      this.audio.door();
-      // the next wave waits for the player to move on (but not forever)
-      this.zombies.phaseT = 30;
-    }
   }
 
   shootTargets() {
@@ -339,20 +371,6 @@ class Game {
     this.hud.announce(POWERUPS[type].name, sub, 2);
   }
 
-  // Doors shut behind the player: once they are through an open door it seals for good.
-  _checkDoors() {
-    const p = this.player.pos, world = this.world;
-    const d = world.doorBehind(p.x, p.z);
-    this.doorHint = world.doorOpen && this.zombies.phase === 'intermission';
-    if (!d) return;
-    world.sealDoor(d);
-    this.zombies.requeueStranded();
-    if (this.zombies.phase === 'intermission') this.zombies.phaseT = Math.min(this.zombies.phaseT, 3);
-    this.audio.door();
-    this.player.shake = 0.03;
-    this.hud.announce(d.k === LAB_ROOM - 1 ? 'THE LAB' : 'SEALED IN', 'The door slams shut behind you', 2.6);
-  }
-
   // ---------------------------------------------------------------- interactables
   _nearestInteractable() {
     const p = this.player.pos, fwd = this.player.forward(V);
@@ -368,7 +386,18 @@ class Game {
     const it = this._nearestInteractable();
     const key = '<kbd>F</kbd> ';
     let html = '', use = null;
-    if (it && it.type === 'wallbuy') {
+    if (it && it.type === 'barrier' && !it.barrier.bought) {
+      const bar = it.barrier;
+      const name = this.world.barrierDest(bar, this.player.pos.x, this.player.pos.z);
+      html = `${key}Open ${name} <b>${it.cost}</b>`;
+      use = () => {
+        if (this.spend(it.cost)) {
+          this.world.buyBarrier(bar, this.zombies.round);
+          this.audio.door();
+          this.hud.announce(bar.lab ? 'THE LAB OPENS' : name.toUpperCase(), bar.lab ? 'Something huge stirs below' : 'Area unlocked', 2.8);
+        }
+      };
+    } else if (it && it.type === 'wallbuy') {
       const w = WEAPONS[it.weapon];
       if (this.weapons.has(it.weapon)) {
         const cost = Math.round(it.cost / 2);
@@ -475,6 +504,7 @@ class Game {
     else if (this.state === 'menu') this._menuCamera();
 
     this.world.update(Math.floor(this.time * 12) / 12);   // world animation is stepped too
+    this._storm(dt);
     this.render();
     this.input.pressed.clear();
     this.input.mousePressed[0] = this.input.mousePressed[1] = this.input.mousePressed[2] = false;
@@ -490,7 +520,6 @@ class Game {
     this.effects.update(dt);
     this._updateDrops(dt);
     this._updateBox(dt);
-    this._checkDoors();
     if (this.state !== 'playing') return;   // died this frame
     this._interact();
 
@@ -504,10 +533,23 @@ class Game {
   }
 
   _menuCamera() {
-    const [cx, cz0] = this.world.roomCenter(5), cz = cz0 - 1, a = Math.floor(this.time * 15) / 15 * 0.07;
-    this.camera.position.set(cx + Math.cos(a) * 2.2, 2.1, cz + 1 + Math.sin(a) * 2.2);
-    this.camera.lookAt(cx + Math.cos(a + 2.4) * 4, 1.4, cz + 1 + Math.sin(a + 2.4) * 4);
+    const [cx, cz] = this.world.lawnCenter, a = Math.floor(this.time * 15) / 15 * 0.06;
+    this.camera.position.set(cx + Math.cos(a) * 3, 2.0, cz + 2 + Math.sin(a) * 2);
+    this.camera.lookAt(cx + Math.cos(a + 2.2) * 4, 1.3, cz - 1 + Math.sin(a + 2.2) * 4);
     if (this.camera.fov !== 70) { this.camera.fov = 70; this.camera.updateProjectionMatrix(); }
+  }
+
+  // Rain + thunder while the camera is out on the lawn (menu and in-game).
+  _storm(dt) {
+    const outside = this.world.isOutdoor(this.camera.position.x, this.camera.position.z);
+    this.rain.update(dt, this.camera.position, outside);
+    if (!outside) { this.stormT = 3 + Math.random() * 5; return; }
+    this.stormT -= dt;
+    if (this.stormT <= 0) {
+      this.stormT = 5 + Math.random() * 9;
+      this.world.flashLightning();
+      if (this.audio.ok) this.audio.thunder();
+    }
   }
 
   render() {
@@ -675,7 +717,7 @@ class Game {
         if (playing) { this.weapons.maxAmmo(); this._adminMsg('Ammo refilled.'); } else this._adminMsg('Start a game first.');
         break;
       case 'doors':
-        if (playing) { for (let k = 1; k <= 9; k++) this.world.openDoor(k); this._adminMsg('All doors open.'); }
+        if (playing) { for (const b of this.world.barriers) this.world.buyBarrier(b, this.zombies.round); this._adminMsg('All areas open.'); }
         else this._adminMsg('Start a game first.');
         break;
       case 'revolver': case 'sniper': case 'lmg':

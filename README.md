@@ -7,12 +7,12 @@ A PSX-styled browser FPS built with [three.js](https://threejs.org/). Survive ro
 ## What's in it
 
 - **PSX look** — rendered at 240p (360p/480p in Settings), wobbling snapped vertices, chunky unfiltered textures, 15-bit dithered colour and stop-motion animation.
-- **Zombies mode** — you start locked in one nearly empty room. Clearing a wave opens the next door; walk through and it slams shut behind you, so buy what you want before moving on. There are 16 rooms to fight through, each adding something new. Ghouls shamble, crawlers sprint at you from round 3, horned brutes arrive from round 5.
-- **The lab** — the 17th and final room is a laboratory. Reaching it spawns **The Warden**, a giant armored boss with a health bar, alongside acid-blooded mutants from the vents. Beat it for a big payout; another Warden turns up every 5 rounds after. You can also buy the LMG or overclock a gun here.
+- **Zombies mode** — you start outside on a dark, rainy lawn and fight your way into the house. Nothing opens on its own: each barrier between areas is **bought with points** (COD-Zombies style) and stays open, so the map grows as you earn. Enemies only come from areas you've opened. Ghouls shamble, crawlers sprint at you from round 3, horned brutes arrive from round 5.
+- **The lab** — past the Vault, the final barrier opens the laboratory. Buying it spawns **The Warden**, a giant armored boss with a health bar, and from then on acid-blooded mutants pour from the vents and another Warden returns every few rounds. The LMG rack and the overclock station are down here too.
 - **Gore** — heads come off, arms get severed, close shotgun blasts and big guns burst bodies into chunks, and blood pools, sprays up walls and spatters the screen.
 - **Slow with a gun, fast with a knife** — you move slowly with a gun out, and heavier guns are slower still. Draw the knife to move at 175% speed; it slashes (hold fire) and stabs (aim button).
 - **Seven guns** — pistol, SMG, shotgun, assault rifle, sniper, LMG and a golden revolver.
-- **Weapon racks, the Mystery Slot and shrines** — spread through the rooms; spend points mid-run on guns, ammo, a random weapon, double health or faster reloads.
+- **Eight named areas** — Rainy Lawn, Foyer, Casino Floor, Crypt, Boiler Room, Armoury, Gallery and Vault — each with its own weapon rack, shrine, Mystery Slot or ammo cache to spend points on.
 - **Power-up drops** — Max Ammo, Double Points, Insta-Kill and Chip Bonus.
 - **Weapon cases** — three cases, a full-screen spinning reel, five rarities and 35 gun skins. Equip skins in the Armory or sell them back for chips.
 - **Knife crates** — a separate menu with three crates and 28 knives across seven types: shiv, cleaver, bayonet, machete, stiletto, karambit and butterfly knife (which flips open when you draw it). Knives are cosmetic; they all handle the same.

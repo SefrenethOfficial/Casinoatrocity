@@ -283,18 +283,20 @@ export class ZombieDirector {
     return Math.round(hp);
   }
   // Rooms are small, so early waves are modest. Once the lab opens (round 10+) there are far more.
-  countFor(round) { return Math.min(Math.round((6 + 3 * (round - 1)) * (round >= LAB_ROOM ? 1.5 : 1)), 110); }
-  maxAliveFor(round) { return round >= LAB_ROOM ? 30 : Math.min(8 + 2 * round, 22); }
+  countFor(round) { return Math.min(Math.round((6 + 3 * (round - 1)) * (this.game.world.labOpen ? 1.5 : 1)), 110); }
+  maxAliveFor(round) { return this.game.world.labOpen ? 30 : Math.min(8 + 2 * round, 22); }
   // Tuned against the player: slower than a gun-sprint early on, but only the knife outruns crawlers.
   speedFor(round) { return Math.min(1.15 + 0.2 * round, 3.2); }
-  bossHP(round) { return 7000 + 3000 * Math.max(0, round - LAB_ROOM); }
+  bossHP(round) { return 7000 + 3000 * Math.max(0, round - (this.game.world.labOpenRound + 1)); }
 
   startRound() {
     this.round++;
     this.toSpawn = this.countFor(this.round);
     this.maxAlive = this.maxAliveFor(this.round);
     this.brutesLeft = this.round >= 5 ? 1 + Math.floor((this.round - 5) / 3) : 0;
-    this.bossWave = this.round >= LAB_ROOM && (this.round === LAB_ROOM || (this.round - LAB_ROOM) % 5 === 0);
+    const w = this.game.world;
+    const bossBase = w.labOpenRound + 1;
+    this.bossWave = w.labOpen && this.round >= bossBase && (this.round - bossBase) % 5 === 0;
     this.phase = 'active';
     this.spawnT = 1.2;
     this.game.onRoundStart(this.round);
@@ -319,7 +321,7 @@ export class ZombieDirector {
   pickType() {
     const r = this.round;
     if (this.brutesLeft > 0 && Math.random() < 0.12) { this.brutesLeft--; return 'brute'; }
-    if (r >= LAB_ROOM && Math.random() < 0.3) return 'mutant';
+    if (this.game.world.labOpen && Math.random() < 0.3) return 'mutant';
     if (r >= 3 && Math.random() < Math.min(0.1 + 0.03 * r, 0.35)) return 'crawler';
     return 'ghoul';
   }
