@@ -114,7 +114,7 @@ export class Hud {
     this.set('session-chips', '+' + game.sessionChips);
     this.set('round-num', String(Math.max(1, zombies.round)));
     this.style('health-fill', 'width', Math.max(0, (player.health / player.maxHealth) * 100).toFixed(0) + '%');
-    this.set('zleft', zombies.phase === 'active' ? `${zombies.remaining} LEFT` : '');
+    this.set('zleft', zombies.phase === 'active' ? `${zombies.remaining} LEFT` : game.doorHint ? 'THE DOOR IS OPEN \u2014 MOVE ON' : '');
 
     const pu = [];
     if (game.doubleT > 0) pu.push(`<span style="color:#ffd65e">DOUBLE POINTS ${Math.ceil(game.doubleT)}</span>`);

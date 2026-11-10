@@ -257,7 +257,7 @@ export class ZombieDirector {
     return Math.round(hp);
   }
   // Rooms are small, so early waves are modest. Once the lab opens (round 10+) there are far more.
-  countFor(round) { return Math.min(Math.round((5 + 3 * (round - 1)) * (round >= 10 ? 1.5 : 1)), 110); }
+  countFor(round) { return Math.min(Math.round((6 + 3 * (round - 1)) * (round >= 10 ? 1.5 : 1)), 110); }
   maxAliveFor(round) { return round >= 10 ? 30 : Math.min(8 + 2 * round, 22); }
   // Tuned against the player: slower than a gun-sprint early on, but only the knife outruns crawlers.
   speedFor(round) { return Math.min(1.15 + 0.2 * round, 3.2); }
@@ -298,6 +298,24 @@ export class ZombieDirector {
     if (type === 'brute') audio.roar();
     else if (type === 'crawler' || type === 'mutant') audio.screech();
     return z;
+  }
+
+  // After a door seals, anything left on the far side can never reach the player. Pull those
+  // enemies out and put them back in the queue so the wave can still be finished.
+  requeueStranded() {
+    const { world, player, scene } = this.game;
+    world.computeFlow(player.pos.x, player.pos.z);
+    for (let i = this.zombies.length - 1; i >= 0; i--) {
+      const z = this.zombies[i];
+      if (world.reachable(z.x, z.z)) continue;
+      if (!z.dead) {
+        this.toSpawn++;
+        if (z.type === 'brute') this.brutesLeft++;
+        for (const p of z.parts) { const k = this.hitMeshes.indexOf(p); if (k >= 0) this.hitMeshes.splice(k, 1); }
+      }
+      scene.remove(z.group);
+      this.zombies.splice(i, 1);
+    }
   }
 
   // Returns true if the hit killed the enemy.

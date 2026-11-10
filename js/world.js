@@ -11,25 +11,28 @@ export const UPGRADE_COST = 5000;
 export const BOX_COST = 950;
 
 // Legend: . floor  C pillar  T tomb slab  S crates  B barrels  F brazier (light)  M mystery slot
-// 1/2/3/4 weapon racks  J/Q shrines (perks)  Z enemy spawn  P player spawn
+// 1/2/3/4 weapon racks  J/Q shrines (perks)  A ammo cache  Z enemy spawn  P player spawn
 // Lab only: K specimen tank  D lab bench  U overclock station  w ceiling light (walkable)
 //
-// Rooms 1-9 are 5x5 cells and snake through a 3x3 block; `at` is the room's column/row in that block.
+// Rooms 1-9 are 7x7 cells (14 m square) and snake through a 3x3 block; `at` is the room's
+// column/row in that block. Doors sit in the middle of a wall, so keep row 3 / column 3 clear there.
+const ROOM = 7, PITCH = ROOM + 1, MID = 3;
 const ROOMS = [
-  { at: [0, 0], cells: ['Z...F', '.....', '..P..', '.....', 'S...Z'] },   // 1: bare starting cell
-  { at: [1, 0], cells: ['F.1..', '.....', '.....', '.....', 'Z...Z'] },   // 2: SMG
-  { at: [2, 0], cells: ['Z..TT', '.....', '.....', 'B....', 'F...Z'] },   // 3: crypt
-  { at: [2, 1], cells: ['F...Z', '.....', '....2', '.....', 'Z..S.'] },   // 4: shotgun
-  { at: [1, 1], cells: ['Z.M.F', '.....', '.....', '.....', 'B...Z'] },   // 5: mystery slot
-  { at: [0, 1], cells: ['J...F', '.....', '.....', 'T....', 'Z...Z'] },   // 6: thick skin shrine
-  { at: [0, 2], cells: ['F...Z', '.....', '3....', '.....', 'Z..SS'] },   // 7: assault rifle
-  { at: [1, 2], cells: ['Z.Q.F', '.....', '.....', '.....', 'C...Z'] },   // 8: fast hands shrine
-  { at: [2, 2], cells: ['F.B.Z', '.....', '.....', '.....', 'Z.S.F'] },   // 9: antechamber
+  { at: [0, 0], cells: ['Z.....F', '.......', '.......', '...P...', '.......', '.......', 'S..F..Z'] },   // 1: bare starting cell
+  { at: [1, 0], cells: ['F..1..F', '.......', '.......', '.......', '.......', '.C...C.', 'Z..A..Z'] },   // 2: SMG
+  { at: [2, 0], cells: ['Z...TTF', '....TT.', '.......', '.......', '.B.....', '.......', 'F...A.Z'] },   // 3: crypt
+  { at: [2, 1], cells: ['F.....Z', '.......', '.....S.', '......2', '.......', '.......', 'Z...A.F'] },   // 4: shotgun
+  { at: [1, 1], cells: ['Z..M..F', '.......', '.C...C.', '.......', '.C...C.', '.......', 'F..A..Z'] },   // 5: mystery slot
+  { at: [0, 1], cells: ['J.....F', '.......', '..TT...', 'F......', '.......', '.......', 'Z.A...Z'] },   // 6: thick skin shrine
+  { at: [0, 2], cells: ['F.....Z', '.......', '.......', '3......', '.......', '.SS....', 'Z...A.F'] },   // 7: assault rifle
+  { at: [1, 2], cells: ['Z..Q..F', '.......', '.C...C.', '.......', '.......', '.......', 'F..A..Z'] },   // 8: fast hands shrine
+  { at: [2, 2], cells: ['F.....Z', '..S....', '.......', '.......', '.......', '....B..', 'Z..A..F'] },   // 9: antechamber
 ];
-// Door k (1-9) opens when wave k is cleared and leads into room k + 1. [cellX, cellZ]
-const DOORS = [[6, 3], [12, 3], [15, 6], [12, 9], [6, 9], [3, 12], [6, 15], [12, 15], [18, 15]];
+// Door k (1-9) opens when wave k is cleared and leads into room k + 1. It shuts for good once
+// the player has walked through. [cellX, cellZ]
+const DOORS = [[8, 4], [16, 4], [20, 8], [16, 12], [8, 12], [4, 16], [8, 20], [16, 20], [24, 20]];
 // Room 10: the lab. 9x11 cells with its top-left interior cell at LAB_X, LAB_Z.
-const LAB_X = 19, LAB_Z = 7;
+const LAB_X = 25, LAB_Z = 13;
 const LAB = [
   'Z.K.K.K.Z',
   '.........',
@@ -39,17 +42,18 @@ const LAB = [
   '..D.U.D..',
   'K.......K',
   '....w....',
-  '.........',
+  '........A',
   '..DD.DD..',
   'Z.K.w.K.Z',
 ];
-const GRID_W = 29, GRID_H = 19;
+const GRID_W = 35, GRID_H = 25;
+export const AMMO_COST = 400;
 
 function buildGrid() {
   const grid = Array.from({ length: GRID_H }, () => Array(GRID_W).fill('#'));
   const room = Array.from({ length: GRID_H }, () => Array(GRID_W).fill(0));   // which room a cell belongs to
   ROOMS.forEach((r, i) => {
-    const x0 = 1 + r.at[0] * 6, z0 = 1 + r.at[1] * 6;
+    const x0 = 1 + r.at[0] * PITCH, z0 = 1 + r.at[1] * PITCH;
     r.cells.forEach((row, dz) => [...row].forEach((ch, dx) => { grid[z0 + dz][x0 + dx] = ch; room[z0 + dz][x0 + dx] = i + 1; }));
   });
   LAB.forEach((row, dz) => [...row].forEach((ch, dx) => { grid[LAB_Z + dz][LAB_X + dx] = ch; room[LAB_Z + dz][LAB_X + dx] = 10; }));
@@ -57,7 +61,7 @@ function buildGrid() {
   return { grid, room };
 }
 
-const OBSTACLE_H = { T: 1.1, S: 1.7, B: 1.15, F: 1.25, M: 2.4, 1: 2.3, 2: 2.3, 3: 2.3, 4: 2.3, J: 2.6, Q: 2.6, K: 2.9, D: 1.5, U: 2.4 };
+const OBSTACLE_H = { A: 1.0, T: 1.1, S: 1.7, B: 1.15, F: 1.25, M: 2.4, 1: 2.3, 2: 2.3, 3: 2.3, 4: 2.3, J: 2.6, Q: 2.6, K: 2.9, D: 1.5, U: 2.4 };
 const RACKS = { 1: 'smg', 2: 'shotgun', 3: 'ar', 4: 'lmg' };
 export const PERKS = {
   J: { id: 'thick', name: 'Thick Skin', desc: 'double health', cost: 2500, color: 0xff3344 },
@@ -146,7 +150,7 @@ export class World {
   roomCenter(n) {
     if (n === 10) return [(LAB_X + 4.5) * CELL, (LAB_Z + 5.5) * CELL];
     const r = ROOMS[n - 1];
-    return [(1 + r.at[0] * 6 + 2.5) * CELL, (1 + r.at[1] * 6 + 2.5) * CELL];
+    return [(1 + r.at[0] * PITCH + MID + 0.5) * CELL, (1 + r.at[1] * PITCH + MID + 0.5) * CELL];
   }
 
   _build() {
@@ -282,6 +286,15 @@ export class World {
           const screen = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.38, 0.14), screenMat); screen.position.set(x - 0.3, 1.25, z);
           const flask = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.3, 5), tankMat); flask.position.set(x + 0.5, 1.1, z + 0.2);
           scene.add(desk, monitor, screen, flask);
+        } else if (ch === 'A') {
+          const crate = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.8, 1.0), L({ color: 0x3f5a34 }));
+          crate.position.set(x, 0.4, z);
+          const band = new THREE.Mesh(new THREE.BoxGeometry(1.54, 0.16, 1.04), L({ color: 0xc9a227 }));
+          band.position.set(x, 0.5, z);
+          const label = labelSprite(['AMMO', AMMO_COST + ' pts'], '#9fdc6a');
+          label.position.set(x, 1.9, z);
+          scene.add(crate, band, label);
+          this.interactables.push({ type: 'ammo', x, z });
         } else if (ch === 'U') {
           this._buildUpgrade(x, z);
         } else if (ch === 'M') {
@@ -355,17 +368,16 @@ export class World {
     g.add(slab);
     this.scene.add(g);
     g.updateMatrixWorld(true);
-    const door = { k, cx, cz, x, z, group: g, slab, open: false, openedAt: 0 };
+    const door = { k, cx, cz, x, z, group: g, slab, open: false, sealed: false };
     this.doors.push(door);
     this.solids.push(slab);
   }
 
-  // Opens the door behind wave k. Returns false if there is no such door or it is already open.
+  // Opens the door behind wave k. Returns false if there is no such door or it has already been used.
   openDoor(k) {
     const d = this.doors.find(x => x.k === k);
-    if (!d || d.open) return false;
+    if (!d || d.open || d.sealed) return false;
     d.open = true;
-    d.openedAt = this.time;
     this.blockedGrid[d.cz * this.w + d.cx] = 0;
     const i = this.solids.indexOf(d.slab);
     if (i >= 0) this.solids.splice(i, 1);
@@ -373,9 +385,29 @@ export class World {
     return true;
   }
 
+  // Slams a door shut for good (called once the player is through it).
+  sealDoor(d) {
+    d.open = false;
+    d.sealed = true;
+    d.group.visible = true;
+    this.blockedGrid[d.cz * this.w + d.cx] = 1;
+    if (!this.solids.includes(d.slab)) this.solids.push(d.slab);
+  }
+
+  // An open door the player has just walked through, if any: they are in the room beyond it
+  // and clear of the doorway.
+  doorBehind(px, pz) {
+    for (const d of this.doors) {
+      if (d.open && this.roomAt(px, pz) === d.k + 1 && Math.hypot(px - d.x, pz - d.z) > 2.1) return d;
+    }
+    return null;
+  }
+  get doorOpen() { return this.doors.some(d => d.open); }
+
   resetDoors() {
     for (const d of this.doors) {
       d.open = false;
+      d.sealed = false;
       d.slab.position.y = WALL_H / 2;
       d.group.visible = true;
       this.blockedGrid[d.cz * this.w + d.cx] = 1;
@@ -384,15 +416,13 @@ export class World {
     this.unlocked = 1;
   }
 
-  // Spawn points the director may use right now: in opened rooms, a short walk from the player
-  // but not on top of them. Needs an up-to-date flow field.
+  // Spawn points the director may use right now: anywhere the player can currently be reached
+  // from (sealed rooms are cut off), a short walk away but not on top of them. Needs a fresh flow field.
   spawnPoints(px, pz) {
-    const open = this.spawns.filter(s => s.room <= this.unlocked);
-    const near = open.filter(s => {
-      const f = this.flow[Math.floor(s.z / CELL) * this.w + Math.floor(s.x / CELL)];
-      return f >= 2 && f <= 14 && Math.hypot(s.x - px, s.z - pz) > 4.5;
-    });
-    return near.length ? near : open;
+    const flowAt = s => this.flow[Math.floor(s.z / CELL) * this.w + Math.floor(s.x / CELL)];
+    const open = this.spawns.filter(s => flowAt(s) >= 0);
+    const near = open.filter(s => flowAt(s) >= 2 && flowAt(s) <= 16 && Math.hypot(s.x - px, s.z - pz) > 4.5);
+    return near.length ? near : open.length ? open : this.spawns.filter(s => s.room === this.roomAt(px, pz));
   }
 
   // ---- props ----
@@ -607,12 +637,15 @@ export class World {
   update(time) {
     this.time = time;
     for (const fn of this.animated) fn(time);
-    // opened doors grind down into the floor
+    // open doors grind down into the floor; sealed ones slam back up
+    const dt = Math.min(Math.max(time - (this._lastT ?? time), 0), 0.2);
+    this._lastT = time;
     for (const d of this.doors) {
-      if (!d.open || !d.group.visible) continue;
-      const y = WALL_H / 2 - (time - d.openedAt) * 1.8;
-      d.slab.position.y = y;
-      if (y < -WALL_H / 2) d.group.visible = false;
+      const target = d.open ? -WALL_H / 2 - 0.1 : WALL_H / 2;
+      const y = d.slab.position.y;
+      if (y > target) d.slab.position.y = Math.max(target, y - dt * 1.8);
+      else if (y < target) d.slab.position.y = Math.min(target, y + dt * 9);
+      d.group.visible = d.slab.position.y > -WALL_H / 2;
     }
   }
 

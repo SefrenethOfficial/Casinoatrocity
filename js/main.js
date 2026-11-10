@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { WEAPONS, BOX_POOL } from './data.js';
 import { save, loadSave, writeSave } from './save.js';
 import { AudioSys } from './audio.js';
-import { World, BOX_COST, UPGRADE_COST } from './world.js';
+import { World, BOX_COST, UPGRADE_COST, AMMO_COST } from './world.js';
 import { Player } from './player.js';
 import { WeaponSystem } from './weapons.js';
 import { Effects } from './gore.js';
@@ -79,6 +79,7 @@ class Game {
     this.perks = new Set();
     this.perkHtml = '';
     this.promptHtml = '';
+    this.doorHint = false;
     this.dropsThisRound = 0;
     for (const d of this.drops) this.scene.remove(d.mesh);
     this.drops.length = 0;
@@ -188,7 +189,11 @@ class Game {
     const sub = !opened ? `+${bonus} chips` : round === 9 ? `+${bonus} chips \u2022 the lab is open` : `+${bonus} chips \u2022 a door grinds open`;
     this.hud.announce('ROUND CLEARED', sub, 3.6);
     this.audio.roundEnd();
-    if (opened) this.audio.door();
+    if (opened) {
+      this.audio.door();
+      // the next wave waits for the player to move on (but not forever)
+      this.zombies.phaseT = 30;
+    }
   }
 
   shootTargets() {
@@ -322,6 +327,20 @@ class Game {
     this.hud.announce(POWERUPS[type].name, sub, 2);
   }
 
+  // Doors shut behind the player: once they are through an open door it seals for good.
+  _checkDoors() {
+    const p = this.player.pos, world = this.world;
+    const d = world.doorBehind(p.x, p.z);
+    this.doorHint = world.doorOpen && this.zombies.phase === 'intermission';
+    if (!d) return;
+    world.sealDoor(d);
+    this.zombies.requeueStranded();
+    if (this.zombies.phase === 'intermission') this.zombies.phaseT = Math.min(this.zombies.phaseT, 3);
+    this.audio.door();
+    this.player.shake = 0.03;
+    this.hud.announce(d.k === 9 ? 'THE LAB' : 'SEALED IN', 'The door slams shut behind you', 2.6);
+  }
+
   // ---------------------------------------------------------------- interactables
   _nearestInteractable() {
     const p = this.player.pos, fwd = this.player.forward(V);
@@ -353,6 +372,13 @@ class Game {
       else {
         html = `${key}Buy ${pk.name} (${pk.desc}) <b>${pk.cost}</b>`;
         use = () => { if (this.spend(pk.cost)) this._grantPerk(pk); };
+      }
+    } else if (it && it.type === 'ammo') {
+      const guns = this.weapons.slots;
+      if (guns.every(g => g.reserve >= WEAPONS[g.id].reserve)) html = 'Ammo is full';
+      else {
+        html = `${key}Refill all ammo <b>${AMMO_COST}</b>`;
+        use = () => { if (this.spend(AMMO_COST)) this.weapons.maxAmmo(); };
       }
     } else if (it && it.type === 'upgrade') {
       const w = this.weapons;
@@ -451,6 +477,7 @@ class Game {
     this.effects.update(dt);
     this._updateDrops(dt);
     this._updateBox(dt);
+    this._checkDoors();
     if (this.state !== 'playing') return;   // died this frame
     this._interact();
 
