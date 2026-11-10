@@ -325,7 +325,7 @@ class Game {
   }
 
   _applyDrop(type) {
-    this.audio.powerup();
+    this.audio.upgrade();
     let sub = '';
     if (type === 'max') this.weapons.maxAmmo();
     else if (type === 'double') this.doubleT = 30;
@@ -394,7 +394,7 @@ class Game {
       else {
         html = `${key}Overclock ${w.def.name} (double damage) <b>${UPGRADE_COST}</b>`;
         use = () => {
-          if (this.spend(UPGRADE_COST) && w.overclock()) this.hud.announce(w.displayName.toUpperCase(), 'double damage', 2.4);
+          if (this.spend(UPGRADE_COST) && w.overclock()) { this.audio.upgrade(); this.hud.announce(w.displayName.toUpperCase(), 'double damage', 2.4); }
         };
       }
     } else if (it && it.type === 'box') {
@@ -417,6 +417,7 @@ class Game {
   }
 
   _grantPerk(pk) {
+    this.audio.upgrade();
     this.perks.add(pk.id);
     if (pk.id === 'thick') { this.player.maxHealth = 200; this.player.health = 200; }
     if (pk.id === 'hands') this.weapons.reloadMult = 0.5;

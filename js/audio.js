@@ -10,7 +10,7 @@ const SHOTS = {
   sniper:   { rate: 0.52, vol: 1.0,  dur: 0.5,  freq: 1100, q: 0.5, gain: 0.85, thump: 90,  thumpGain: 1.0, boom: true },
   revolver: { rate: 0.7,  vol: 1.0,  dur: 0.42, freq: 1300, q: 0.6, gain: 0.8,  thump: 110, thumpGain: 0.95, boom: true },
 };
-const SAMPLES = { shot: 'assets/sfx/shot.mp3', click: 'assets/sfx/click.mp3' };
+const SAMPLES = { shot: 'assets/sfx/shot.mp3', click: 'assets/sfx/click.mp3', upgrade: 'assets/sfx/upgrade.mp3' };
 const SHOT_LEAD_IN = 0.06;   // the gunshot recording starts with a short silence
 
 export class AudioSys {
@@ -154,6 +154,8 @@ export class AudioSys {
   tick() { if (!this._sample('click', 1.2, 0.5)) this._tone('square', 1300, 900, 0.025, 0.09); }
   click() { this._sample('click', 1, 0.7); }
   powerup() { [523, 659, 784, 1047].forEach((f, i) => this._tone('triangle', f, f, 0.16, 0.22, i * 0.07)); }
+  // Played whenever the player gains an upgrade (perk, overclock or power-up).
+  upgrade() { if (!this._sample('upgrade', 1, 0.95)) this.powerup(); }
   roundStart() {
     [196, 185, 174, 147].forEach((f, i) => this._tone('sawtooth', f, f * 0.98, 0.5, 0.2, i * 0.32));
   }
