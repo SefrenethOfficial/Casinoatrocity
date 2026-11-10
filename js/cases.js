@@ -4,7 +4,6 @@ import { save, writeSave, addSkin, sellItem, equipSkin, ownsSkin } from './save.
 import { weaponIcon } from './models.js';
 
 const $ = id => document.getElementById(id);
-const ITEM_W = 158;   // 150px card + 8px gap
 const WIN_INDEX = 46;
 const REEL_LEN = 54;
 
@@ -26,6 +25,12 @@ export class CaseUI {
     this.armoryWeapon = 'pistol';
     this.lastItem = null;
     $('open-case').addEventListener('click', () => this.open());
+    $('roll').addEventListener('click', e => { if (this.spinning && !e.target.closest('button')) this.skip = true; });
+    window.addEventListener('keydown', e => {
+      if ($('roll').classList.contains('hidden')) return;
+      if (this.spinning) { if (e.code === 'Space' || e.code === 'Enter') this.skip = true; }
+      else if (e.code === 'Escape') this.closeRoll();
+    });
   }
 
   refreshChips() {
@@ -73,6 +78,7 @@ export class CaseUI {
       ? `You need ${c.price - Math.floor(save.chips)} more chips. Go clear some rounds.` : '';
   }
 
+  // Opening takes over the whole screen: a big reel, then a full-screen reveal.
   open() {
     const c = this.selected;
     if (this.spinning || save.chips < c.price) { this.game.audio.deny(); return; }
@@ -85,31 +91,42 @@ export class CaseUI {
     writeSave();
     this.refreshChips();
     this.spinning = true;
+    this.skip = false;
     this.updateOpenButton();
+
+    const overlay = $('roll');
+    overlay.classList.remove('hidden', 'revealed');
+    overlay.style.setProperty('--rc', c.color);
+    $('roll-title').textContent = c.name;
+    $('roll-hint').textContent = 'Click to skip';
     $('result').classList.add('hidden');
-    $('reel-idle').classList.add('hidden');
+    $('reel-wrap').classList.remove('hidden');
 
     const reel = $('reel');
     reel.innerHTML = '';
+    reel.style.transform = 'translateX(0)';
     for (let i = 0; i < REEL_LEN; i++) {
       const id = i === WIN_INDEX ? skinId : rollCase(c);
       reel.appendChild(itemCard(SKINS[id]));
     }
+    // Card size depends on the window, so measure instead of assuming.
+    const cardW = reel.children[0].offsetWidth;
+    const pitch = reel.children[1].offsetLeft - reel.children[0].offsetLeft;
     const wrapW = $('reel-wrap').clientWidth;
-    const offset = (Math.random() - 0.5) * 120;                 // where inside the winning card we stop
-    const target = WIN_INDEX * ITEM_W + 75 + offset - wrapW / 2;
-    const dur = $('fast-open').checked ? 1500 : 5600;
+    const offset = (Math.random() - 0.5) * cardW * 0.8;          // where inside the winning card we stop
+    const target = WIN_INDEX * pitch + cardW / 2 + offset - wrapW / 2;
+    const dur = $('fast-open').checked ? 1600 : 6000;
     const start = performance.now();
     let lastTick = -1;
     const step = now => {
-      const t = Math.min((now - start) / dur, 1);
+      const t = this.skip ? 1 : Math.min((now - start) / dur, 1);
       const e = 1 - Math.pow(1 - t, 4);
       const x = target * e;
       reel.style.transform = `translateX(${-x}px)`;
-      const idx = Math.floor((x + wrapW / 2) / ITEM_W);
+      const idx = Math.floor((x + wrapW / 2) / pitch);
       if (idx !== lastTick) { lastTick = idx; this.game.audio.tick(); }
       if (t < 1) requestAnimationFrame(step);
-      else this.reveal(item);
+      else setTimeout(() => this.reveal(item), this.skip ? 0 : 450);
     };
     requestAnimationFrame(step);
   }
@@ -117,30 +134,48 @@ export class CaseUI {
   reveal(item) {
     this.spinning = false;
     this.lastItem = item;
+    const c = this.selected;
     const skin = SKINS[item.skin], r = RARITIES[skin.rarity];
     this.game.audio.reveal(r.order);
     const copies = save.inventory.filter(it => it.skin === skin.id).length;
+    const overlay = $('roll');
+    overlay.style.setProperty('--rc', r.color);
+    overlay.classList.add('revealed');
+    $('reel-wrap').classList.add('hidden');
+    $('roll-title').textContent = r.name;
+    $('roll-hint').textContent = '';
     const res = $('result');
-    res.style.setProperty('--rc', r.color);
     res.innerHTML = `<img alt="" src="${weaponIcon(skin.weapon, skin.id)}">
-      <div class="info"><div class="rar">${r.name}</div><div class="ttl">${skin.name}</div>
-      <div class="sub">${WEAPONS[skin.weapon].name}${copies > 1 ? ` • duplicate (you own ${copies})` : ''}</div></div>
+      <div class="ttl">${skin.name}</div>
+      <div class="sub">${WEAPONS[skin.weapon].name}${copies > 1 ? ` • duplicate (you own ${copies})` : ''}</div>
       <div class="btns"><button class="btn small" id="res-equip">Equip</button>
-      <button class="btn small" id="res-sell">Sell for ${r.sell}</button></div>`;
+      <button class="btn small" id="res-sell">Sell for ${r.sell}</button>
+      <button class="btn small primary" id="res-again">Open another — ${c.price}</button>
+      <button class="btn small" id="res-done">Done</button></div>`;
     res.classList.remove('hidden');
+    $('res-again').disabled = save.chips < c.price;
     $('res-equip').addEventListener('click', e => {
       equipSkin(skin.weapon, skin.id);
       e.target.textContent = 'Equipped';
       e.target.disabled = true;
     });
-    $('res-sell').addEventListener('click', () => {
+    $('res-sell').addEventListener('click', e => {
       sellItem(item.uid);
-      res.classList.add('hidden');
-      this.refreshChips();
-      this.renderContents();
-      this.updateOpenButton();
       this.game.audio.buy();
+      this.refreshChips();
+      e.target.textContent = 'Sold';
+      e.target.disabled = true;
+      $('res-equip').disabled = true;
+      $('res-again').disabled = save.chips < c.price;
     });
+    $('res-again').addEventListener('click', () => this.open());
+    $('res-done').addEventListener('click', () => this.closeRoll());
+  }
+
+  closeRoll() {
+    if (this.spinning) return;
+    $('roll').classList.add('hidden');
+    this.refreshChips();
     this.renderContents();
     this.updateOpenButton();
   }
@@ -163,10 +198,10 @@ export class CaseUI {
     $('armory-preview').innerHTML = `<img alt="" src="${weaponIcon(w, eq)}">
       <div><div class="ttl">${def.name}</div>
       <div class="sub">${eqSkin ? `${eqSkin.name} • ${RARITIES[eqSkin.rarity].name}` : 'Factory finish'}</div>
-      <dl><dt>Damage</dt><dd>${def.damage}${def.pellets > 1 ? ' × ' + def.pellets : ''}</dd>
-      <dt>Fire rate</dt><dd>${def.rpm} rpm${def.auto ? ' auto' : ''}</dd>
-      <dt>Magazine</dt><dd>${def.mag} / ${def.reserve}</dd>
-      <dt>Found</dt><dd>${w === 'pistol' ? 'Starting weapon' : def.boxOnly ? 'Mystery Slot only' : `Weapon rack, ${def.cost} pts`}</dd></dl></div>`;
+      <dl><dt>Damage</dt><dd>${def.melee ? `${def.damage} slash / ${def.heavyDamage} stab` : def.damage + (def.pellets > 1 ? ' × ' + def.pellets : '')}</dd>
+      ${def.melee ? '' : `<dt>Fire rate</dt><dd>${def.rpm} rpm${def.auto ? ' auto' : ''}</dd><dt>Magazine</dt><dd>${def.mag} / ${def.reserve}</dd>`}
+      <dt>Move speed</dt><dd>${Math.round(def.mobility * 100)}%</dd>
+      <dt>Found</dt><dd>${def.melee ? 'Always carried' : w === 'pistol' ? 'Starting weapon' : def.boxOnly ? 'Mystery Slot only' : `Weapon rack, ${def.cost} pts`}</dd></dl></div>`;
 
     const grid = $('armory-grid');
     grid.innerHTML = '';

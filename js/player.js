@@ -3,7 +3,8 @@ import * as THREE from 'three';
 
 const EYE = 1.66;
 const RADIUS = 0.38;
-const WALK = 4.6, SPRINT = 6.9, ADS_WALK = 2.6;
+// Deliberately slow. The weapon's mobility scales these; only the knife (1.75x) makes you quick.
+const WALK = 3.0, SPRINT = 4.3, ADS_WALK = 1.8;
 const GRAVITY = 21, JUMP_V = 6.6;
 
 export class Player {
@@ -58,7 +59,9 @@ export class Player {
     if (wl > 0) { wx /= wl; wz /= wl; }
 
     this.sprinting = (k.has('ShiftLeft') || k.has('ShiftRight')) && f > 0 && adsAmount < 0.3 && this.onGround;
-    const max = adsAmount > 0.5 ? ADS_WALK : this.sprinting ? SPRINT : WALK;
+    const def = this.game.weapons.def;
+    const mob = def ? def.mobility : 1;
+    const max = (adsAmount > 0.5 ? ADS_WALK : this.sprinting ? SPRINT : WALK) * mob;
     const accel = this.onGround ? 14 : 3;
     const blend = 1 - Math.exp(-accel * dt);
     this.vel.x += (wx * max - this.vel.x) * blend;
@@ -88,7 +91,7 @@ export class Player {
     this.speed2d = Math.hypot(this.vel.x, this.vel.z);
 
     if (this.onGround && this.speed2d > 0.6) {
-      this.bob += dt * this.speed2d * 1.9;
+      this.bob += dt * (2.2 + this.speed2d) * 1.5;
       this.stepT -= dt * this.speed2d;
       if (this.stepT <= 0) { this.stepT = 2.6; this.game.audio.step(); }
     }
@@ -105,13 +108,13 @@ export class Player {
   }
 
   applyCamera() {
-    const bobAmt = this.onGround ? Math.min(this.speed2d / WALK, 1.4) : 0;
-    const by = Math.sin(this.bob * 2) * 0.035 * bobAmt;
+    const bobAmt = this.onGround ? Math.min(this.speed2d / WALK, 1.6) : 0;
+    const by = Math.sin(this.bob * 2) * 0.045 * bobAmt;
     this.camera.position.set(this.pos.x, EYE + this.jumpHeight + by, this.pos.z);
     this.camera.rotation.set(
       this.pitch + this.recoilPitch + (Math.random() - 0.5) * this.shake,
       this.yaw + (Math.random() - 0.5) * this.shake,
-      Math.sin(this.bob) * 0.006 * bobAmt,
+      Math.sin(this.bob) * 0.012 * bobAmt,
     );
   }
 }

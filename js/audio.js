@@ -90,6 +90,20 @@ export class AudioSys {
   hit() { this._tone('square', 1500, 1200, 0.035, 0.1); }
   headshot() { this._tone('square', 2200, 1600, 0.06, 0.16); this._tone('sine', 880, 440, 0.12, 0.2); }
   kill() { this._tone('triangle', 520, 780, 0.09, 0.16); }
+  slash() { this._noise(0.1, 'highpass', 2600, 0.8, 0.22, 0, 900); }
+  gore(big = false) {
+    this._noise(big ? 0.3 : 0.16, 'lowpass', big ? 700 : 900, 1.2, big ? 0.6 : 0.35, 0, 160);
+    this._tone('sine', big ? 110 : 150, 50, big ? 0.28 : 0.14, big ? 0.5 : 0.25);
+    if (big) this._noise(0.22, 'bandpass', 1700, 2, 0.2, 0.05, 500);
+  }
+  roar() {
+    this._tone('sawtooth', 62, 38, 1.1, 0.4);
+    this._noise(0.9, 'bandpass', 320, 2, 0.3, 0, 140);
+  }
+  screech() {
+    this._tone('sawtooth', 620, 300, 0.35, 0.12);
+    this._noise(0.3, 'bandpass', 2200, 4, 0.14, 0, 900);
+  }
   melee() { this._noise(0.12, 'bandpass', 900, 1.2, 0.3, 0, 300); }
   hurt() { this._tone('sawtooth', 160, 70, 0.25, 0.4); this._noise(0.12, 'lowpass', 500, 1, 0.5); }
   step() { this._noise(0.05, 'lowpass', 260, 1, 0.07); }

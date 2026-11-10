@@ -1,64 +1,200 @@
-// Zombie entities plus the round/wave director for the Zombies mode.
+// The dungeon's undead (ghouls, crawlers, brutes) plus the round/wave director for Zombies mode.
 import * as THREE from 'three';
 
-const GEO = {
-  torso: new THREE.BoxGeometry(0.52, 0.66, 0.28),
-  head: new THREE.BoxGeometry(0.32, 0.32, 0.32),
-  arm: new THREE.BoxGeometry(0.13, 0.6, 0.13),
-  leg: new THREE.BoxGeometry(0.18, 0.82, 0.2),
-  eye: new THREE.BoxGeometry(0.06, 0.04, 0.02),
-};
-GEO.arm.translate(0, -0.3, 0);   // pivot at the shoulder
-GEO.leg.translate(0, -0.41, 0);  // pivot at the hip
-
+const ANIM_FPS = 9;   // poses update at this rate on purpose: choppy, stop-motion movement
 const lam = c => new THREE.MeshLambertMaterial({ color: c });
-const SKIN_MATS = [lam(0x6f8f5e), lam(0x7d8a70), lam(0x58785a), lam(0x8a9a7a)];
-const SHIRT_MATS = [lam(0x7a1420), lam(0xd8d2c4), lam(0x1c1c22), lam(0x27408b), lam(0x6a4a1a), lam(0x3b0f4a)];
-const PANTS_MATS = [lam(0x18181c), lam(0x2a2430), lam(0x3a2f22)];
-const EYE_MAT = new THREE.MeshBasicMaterial({ color: 0xffd23c });
-
+const basic = c => new THREE.MeshBasicMaterial({ color: c });
 const pick = a => a[(Math.random() * a.length) | 0];
-const RADIUS = 0.36;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const boxGeo = (x, y, z, pivotY = 0) => { const g = new THREE.BoxGeometry(x, y, z); if (pivotY) g.translate(0, pivotY, 0); return g; };
+
+const GEO = {
+  // ghoul
+  gTorso: boxGeo(0.5, 0.62, 0.27), gRibs: boxGeo(0.34, 0.3, 0.06), gHead: boxGeo(0.3, 0.3, 0.3),
+  gJaw: boxGeo(0.24, 0.09, 0.22), gArm: boxGeo(0.12, 0.68, 0.12, -0.34), gClaw: boxGeo(0.15, 0.14, 0.15),
+  gLeg: boxGeo(0.17, 0.82, 0.19, -0.41), eye: boxGeo(0.07, 0.05, 0.03), stain: boxGeo(0.22, 0.2, 0.04),
+  // crawler
+  cBody: boxGeo(0.5, 0.3, 0.95), cHead: boxGeo(0.36, 0.28, 0.36), cJaw: boxGeo(0.3, 0.08, 0.3),
+  cLeg: boxGeo(0.1, 0.56, 0.1, -0.28), cSpike: boxGeo(0.08, 0.2, 0.08),
+  // brute
+  bTorso: boxGeo(0.86, 0.74, 0.5), bBelly: boxGeo(0.7, 0.34, 0.56), bHead: boxGeo(0.3, 0.3, 0.3),
+  bHorn: boxGeo(0.07, 0.24, 0.07), bArm: boxGeo(0.24, 0.8, 0.24, -0.4), bFist: boxGeo(0.32, 0.28, 0.32),
+  bLeg: boxGeo(0.28, 0.78, 0.3, -0.39), bPlate: boxGeo(0.34, 0.14, 0.4),
+};
+const MAT = {
+  ghoulSkin: [lam(0x8a9488), lam(0x6f7f76), lam(0x9aa08a), lam(0x5f6b70), lam(0x7b6f78)],
+  rags: [lam(0x3a2f28), lam(0x2c2c33), lam(0x4a1a1a), lam(0x3b3a22), lam(0x242a30)],
+  pants: [lam(0x18181c), lam(0x2a2430), lam(0x2a2218)],
+  crawlerSkin: [lam(0x6b3a3a), lam(0x4a3540), lam(0x5a4636)],
+  bruteSkin: [lam(0x7a5a4a), lam(0x5a6a5a), lam(0x6a5a6a)],
+  bone: lam(0xd8ceb0), gore: lam(0x6a0509), iron: lam(0x2a2a30), claw: lam(0x1a1416),
+  eyeRed: basic(0xff2a1a), eyeGreen: basic(0xb6ff3a), eyeOrange: basic(0xff9a1a),
+};
+
+export const ENEMY_TYPES = {
+  ghoul:   { hp: 1,    speed: 1,    dmg: 30, reach: 1.35, radius: 0.36, points: 60,  chips: 3,  hitAt: 0.38, attackDur: 0.95, centerY: 1.15, neckY: 1.5,  rise: 1.1, gore: 1 },
+  crawler: { hp: 0.5,  speed: 1.75, dmg: 18, reach: 1.3,  radius: 0.42, points: 50,  chips: 3,  hitAt: 0.24, attackDur: 0.7,  centerY: 0.5,  neckY: 0.6,  rise: 0.6, gore: 0.8 },
+  brute:   { hp: 5.5,  speed: 0.62, dmg: 55, reach: 1.95, radius: 0.6,  points: 250, chips: 12, hitAt: 0.62, attackDur: 1.35, centerY: 1.15, neckY: 1.55, rise: 1.6, gore: 2.2 },
+};
+
 const tmp = { x: 0, z: 0 };
 
 class Zombie {
-  constructor(x, z, hp, speed) {
+  constructor(type, x, z, hp, speed) {
+    this.type = type;
+    this.def = ENEMY_TYPES[type];
     this.x = x; this.z = z;
     this.hp = hp; this.maxHp = hp;
     this.speed = speed;
     this.state = 'rising';
     this.t = 0;
+    this.animT = Math.random() / ANIM_FPS;
     this.yaw = Math.random() * 6.28;
     this.phase = Math.random() * 6.28;
     this.attackDone = false;
     this.groanT = 2 + Math.random() * 6;
     this.dead = false;
-
+    this.gone = false;      // set when gibbed: remove with no corpse
+    this.stun = 0;
+    this.fallDir = Math.random() < 0.5 ? 1 : -1;
+    this.scale = type === 'brute' ? 1.5 : rnd(0.92, 1.1);
+    this.parts = [];
+    this.legs = [];
+    this.arms = [];
     const g = this.group = new THREE.Group();
-    const skin = pick(SKIN_MATS), shirt = pick(SHIRT_MATS), pants = pick(PANTS_MATS);
-    const part = (geo, mat, kind, x, y, z) => {
-      const m = new THREE.Mesh(geo, mat);
-      m.position.set(x, y, z);
-      m.userData.zombie = this;
-      m.userData.part = kind;
-      g.add(m);
-      return m;
-    };
-    this.torso = part(GEO.torso, shirt, 'body', 0, 1.15, 0);
-    this.head = part(GEO.head, skin, 'head', 0, 1.66, 0.02);
-    this.armL = part(GEO.arm, skin, 'body', -0.33, 1.42, 0);
-    this.armR = part(GEO.arm, skin, 'body', 0.33, 1.42, 0);
-    this.legL = part(GEO.leg, pants, 'body', -0.14, 0.82, 0);
-    this.legR = part(GEO.leg, pants, 'body', 0.14, 0.82, 0);
-    this.parts = [this.torso, this.head, this.armL, this.armR, this.legL, this.legR];
-    for (const sx of [-0.08, 0.08]) {
-      const e = new THREE.Mesh(GEO.eye, EYE_MAT);
-      e.position.set(sx, 0.03, 0.165);
-      this.head.add(e);
-    }
-    this.torso.rotation.x = 0.18;
-    g.position.set(x, -1.9, z);
+    g.rotation.order = 'YXZ';
+    BUILD[type](this);
+    g.scale.setScalar(this.scale);
+    g.position.set(x, -2.2, z);
     g.rotation.y = this.yaw;
+  }
+
+  // Adds a mesh; `kind` ('head' | 'body') makes it a bullet hitbox, null makes it decoration.
+  add(geo, mat, kind, x, y, z, parent = this.group) {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    if (kind) { m.userData.zombie = this; m.userData.part = kind; this.parts.push(m); }
+    parent.add(m);
+    return m;
+  }
+
+  get centerY() { return this.def.centerY * this.scale; }
+  get neckY() { return this.def.neckY * this.scale; }
+}
+
+const BUILD = {
+  ghoul(z) {
+    const skin = pick(MAT.ghoulSkin), rag = pick(MAT.rags), pants = pick(MAT.pants);
+    z.torso = z.add(GEO.gTorso, rag, 'body', 0, 1.12, 0);
+    z.torso.rotation.x = 0.32;
+    z.add(GEO.gRibs, MAT.bone, null, 0, 0.02, 0.15, z.torso);
+    if (Math.random() < 0.7) z.add(GEO.stain, MAT.gore, null, rnd(-0.12, 0.12), rnd(-0.2, 0.15), 0.14, z.torso);
+    z.head = z.add(GEO.gHead, skin, 'head', 0, 1.6, 0.16);
+    z.jaw = z.add(GEO.gJaw, MAT.gore, null, 0, -0.19, 0.05, z.head);
+    for (const sx of [-0.08, 0.08]) z.add(GEO.eye, MAT.eyeRed, null, sx, 0.03, 0.155, z.head);
+    z.armL = z.add(GEO.gArm, skin, 'body', -0.32, 1.4, 0.1);
+    z.armR = z.add(GEO.gArm, skin, 'body', 0.32, 1.4, 0.1);
+    z.add(GEO.gClaw, MAT.claw, null, 0, -0.7, 0, z.armL);
+    z.add(GEO.gClaw, MAT.claw, null, 0, -0.7, 0, z.armR);
+    z.legs = [z.add(GEO.gLeg, pants, 'body', -0.14, 0.82, 0), z.add(GEO.gLeg, pants, 'body', 0.14, 0.82, 0)];
+    z.arms = [z.armL, z.armR];
+  },
+  crawler(z) {
+    const skin = pick(MAT.crawlerSkin);
+    z.torso = z.add(GEO.cBody, skin, 'body', 0, 0.5, 0);
+    for (let i = 0; i < 3; i++) z.add(GEO.cSpike, MAT.bone, null, 0, 0.22, -0.3 + i * 0.3, z.torso);
+    z.head = z.add(GEO.cHead, skin, 'head', 0, 0.56, 0.62);
+    z.jaw = z.add(GEO.cJaw, MAT.gore, null, 0, -0.17, 0.06, z.head);
+    for (const [sx, sy] of [[-0.1, 0.06], [0.1, 0.06], [-0.05, -0.02], [0.05, -0.02]]) z.add(GEO.eye, MAT.eyeGreen, null, sx, sy, 0.185, z.head);
+    for (const [sx, sz] of [[-1, 1], [1, 1], [-1, -1], [1, -1]]) {
+      const leg = z.add(GEO.cLeg, skin, 'body', sx * 0.3, 0.5, sz * 0.32);
+      leg.rotation.z = sx * 0.55;
+      leg.userData.splay = sx * 0.55;
+      z.legs.push(leg);
+    }
+    z.arms = [z.legs[0], z.legs[1]];
+  },
+  brute(z) {
+    const skin = pick(MAT.bruteSkin);
+    z.torso = z.add(GEO.bTorso, skin, 'body', 0, 1.2, 0);
+    z.torso.rotation.x = 0.15;
+    z.add(GEO.bBelly, skin, 'body', 0, 0.82, 0.04);
+    z.add(GEO.stain, MAT.gore, null, 0.1, 0.05, 0.26, z.torso);
+    z.head = z.add(GEO.bHead, skin, 'head', 0, 1.7, 0.12);
+    z.jaw = z.add(GEO.gJaw, MAT.gore, null, 0, -0.19, 0.05, z.head);
+    for (const sx of [-0.08, 0.08]) z.add(GEO.eye, MAT.eyeOrange, null, sx, 0.03, 0.155, z.head);
+    for (const sx of [-1, 1]) { const h = z.add(GEO.bHorn, MAT.bone, null, sx * 0.14, 0.22, 0, z.head); h.rotation.z = -sx * 0.5; }
+    z.armL = z.add(GEO.bArm, skin, 'body', -0.58, 1.5, 0);
+    z.armR = z.add(GEO.bArm, skin, 'body', 0.58, 1.5, 0);
+    z.add(GEO.bFist, skin, null, 0, -0.86, 0, z.armL);
+    z.add(GEO.bFist, skin, null, 0, -0.86, 0, z.armR);
+    z.add(GEO.bPlate, MAT.iron, 'body', -0.52, 1.62, 0);
+    z.add(GEO.bPlate, MAT.iron, 'body', 0.52, 1.62, 0);
+    z.legs = [z.add(GEO.bLeg, MAT.pants[0], 'body', -0.22, 0.78, 0), z.add(GEO.bLeg, MAT.pants[0], 'body', 0.22, 0.78, 0)];
+    z.arms = [z.armL, z.armR];
+  },
+};
+
+// Stepped pose update. Called ~9 times a second per enemy.
+function pose(z) {
+  const g = z.group, type = z.type, s = Math.sin(z.phase), jit = () => Math.random() - 0.5;
+  g.rotation.y = z.yaw;
+
+  if (z.state === 'rising') {
+    const k = Math.min(z.t / z.def.rise, 1);
+    g.position.y = -2.2 * z.scale * (1 - k) * (1 - k);
+    if (type !== 'crawler') for (const a of z.arms) a.rotation.x = -2.6 + jit() * 0.5;   // clawing out of the pit
+    return;
+  }
+
+  if (z.state === 'dying') {
+    const k = Math.min(z.t / 0.5, 1);
+    if (type === 'crawler') { g.rotation.z = k * Math.PI; g.position.y = 0.3 * k; }
+    else { g.rotation.x = -z.fallDir * k * Math.PI / 2; g.position.y = (type === 'brute' ? 0.3 : 0.16) * k; }
+    if (z.t < 1.6) for (const l of z.legs) l.rotation.x = jit() * 0.9;   // death twitches
+    if (z.t > z.corpseT) g.position.y -= (z.t - z.corpseT) * 0.5;
+    return;
+  }
+  g.position.y = 0;
+
+  if (z.state === 'attack') {
+    const k = z.t / z.def.attackDur, hit = z.def.hitAt / z.def.attackDur;
+    if (type === 'ghoul') {
+      const sw = k < hit ? k / hit : Math.max(0, 1 - (k - hit) * 2);
+      z.armL.rotation.x = -1.2 - sw * 1.4; z.armR.rotation.x = -1.5 - sw * 1.1;
+      z.torso.rotation.x = 0.32 + sw * 0.35;
+    } else if (type === 'crawler') {
+      const sw = k < hit ? k / hit : Math.max(0, 1 - (k - hit) * 2);
+      z.head.rotation.x = -sw * 0.7; z.jaw.rotation.x = sw * 0.9;
+      z.legs[0].rotation.x = z.legs[1].rotation.x = -sw * 1.4;
+    } else {
+      // overhead double-fist smash: wind up, then slam
+      const a = k < hit ? -3.0 * Math.min(1, k / (hit * 0.8)) : -3.0 + Math.min(1, (k - hit) * 6) * 2.4;
+      z.armL.rotation.x = z.armR.rotation.x = a;
+      z.torso.rotation.x = k < hit ? -0.1 : 0.5;
+    }
+    return;
+  }
+
+  // walking
+  if (type === 'ghoul') {
+    z.legs[0].rotation.x = s * 0.75; z.legs[1].rotation.x = -s * 0.75;
+    z.armL.rotation.x = -1.3 + s * 0.3; z.armR.rotation.x = -0.95 - s * 0.35;
+    z.torso.rotation.x = 0.32 + Math.abs(s) * 0.08; z.torso.rotation.z = s * 0.09;
+    z.head.rotation.set(jit() * 0.25, jit() * 0.6, jit() * 0.4);
+    z.jaw.rotation.x = 0.15 + Math.random() * 0.55;
+  } else if (type === 'crawler') {
+    z.legs.forEach((l, i) => { l.rotation.x = (i % 3 === 0 ? 1 : -1) * s * 1.0; l.rotation.z = l.userData.splay + jit() * 0.15; });
+    z.torso.rotation.z = s * 0.12;
+    z.head.rotation.set(jit() * 0.3, jit() * 0.7, 0);
+    z.jaw.rotation.x = Math.random() * 0.7;
+  } else {
+    z.legs[0].rotation.x = s * 0.5; z.legs[1].rotation.x = -s * 0.5;
+    z.armL.rotation.x = -0.25 - s * 0.45; z.armR.rotation.x = -0.25 + s * 0.45;
+    z.armL.rotation.z = -0.22; z.armR.rotation.z = 0.22;
+    z.torso.rotation.x = 0.15; z.torso.rotation.z = s * 0.08;
+    z.head.rotation.set(0, jit() * 0.3, 0);
+    z.jaw.rotation.x = 0.1 + Math.random() * 0.3;
   }
 }
 
@@ -73,7 +209,8 @@ export class ZombieDirector {
     this.phase = 'idle';      // idle | intermission | active
     this.phaseT = 0;
     this.flowT = 0;
-    this.maxAlive = 24;
+    this.maxAlive = 22;
+    this.brutesLeft = 0;
   }
 
   reset() {
@@ -95,39 +232,55 @@ export class ZombieDirector {
     return Math.round(hp);
   }
   countFor(round) { return Math.min(6 + 4 * (round - 1), 90); }
-  speedFor(round) { return Math.min(1.5 + 0.28 * round, 4.9); }
+  // Tuned against the player: slower than a gun-sprint early on, but only the knife outruns crawlers.
+  speedFor(round) { return Math.min(1.15 + 0.2 * round, 3.2); }
 
   startRound() {
     this.round++;
     this.toSpawn = this.countFor(this.round);
+    this.brutesLeft = this.round >= 5 ? 1 + Math.floor((this.round - 5) / 3) : 0;
     this.phase = 'active';
     this.spawnT = 1.2;
     this.game.onRoundStart(this.round);
   }
 
-  spawn() {
-    const { world, player } = this.game;
+  pickType() {
+    const r = this.round;
+    if (this.brutesLeft > 0 && Math.random() < 0.12) { this.brutesLeft--; return 'brute'; }
+    if (r >= 3 && Math.random() < Math.min(0.1 + 0.03 * r, 0.35)) return 'crawler';
+    return 'ghoul';
+  }
+
+  spawn(type = this.pickType(), at = null) {
+    const { world, player, audio } = this.game;
     const spots = world.spawns;
-    const far = spots.filter(s => Math.hypot(s.x - player.pos.x, s.z - player.pos.z) > 14);
-    const s = pick(far.length ? far : spots);
-    const base = this.speedFor(this.round);
-    const speed = Math.min(base * (0.78 + Math.random() * 0.4), 5.3);
-    const z = new Zombie(s.x + (Math.random() - 0.5) * 1.2, s.z + (Math.random() - 0.5) * 1.2, this.healthFor(this.round), speed);
+    const far = spots.filter(s => Math.hypot(s.x - player.pos.x, s.z - player.pos.z) > 12);
+    const s = at || pick(far.length ? far : spots);
+    const def = ENEMY_TYPES[type];
+    const speed = Math.min(this.speedFor(this.round) * def.speed * rnd(0.8, 1.15), type === 'crawler' ? 5.4 : 3.6);
+    const z = new Zombie(type, s.x + rnd(-0.6, 0.6), s.z + rnd(-0.6, 0.6), Math.round(this.healthFor(this.round) * def.hp), speed);
     this.zombies.push(z);
     this.hitMeshes.push(...z.parts);
     this.game.scene.add(z.group);
     this.toSpawn--;
+    if (type === 'brute') audio.roar();
+    else if (type === 'crawler') audio.screech();
     return z;
   }
 
-  // Returns true if the hit killed the zombie.
+  // Returns true if the hit killed the enemy.
   damage(z, amount) {
     if (z.dead) return false;
     z.hp -= amount;
-    if (z.hp > 0) return false;
+    if (z.hp > 0) {
+      if (z.type !== 'brute') z.stun = 0.14;
+      return false;
+    }
     z.dead = true;
     z.state = 'dying';
     z.t = 0;
+    z.animT = 1;   // pose immediately
+    z.corpseT = 7 + Math.random() * 3;
     for (const p of z.parts) {
       const i = this.hitMeshes.indexOf(p);
       if (i >= 0) this.hitMeshes.splice(i, 1);
@@ -145,7 +298,7 @@ export class ZombieDirector {
       this.spawnT -= dt;
       if (this.toSpawn > 0 && this.spawnT <= 0 && this.alive < this.maxAlive) {
         this.spawn();
-        this.spawnT = Math.max(0.35, 2.2 - this.round * 0.18);
+        this.spawnT = Math.max(0.4, 2.2 - this.round * 0.16);
       }
       if (this.toSpawn <= 0 && this.alive === 0) {
         this.phase = 'intermission';
@@ -162,50 +315,56 @@ export class ZombieDirector {
 
     const zs = this.zombies;
     for (let i = zs.length - 1; i >= 0; i--) {
-      const z = zs[i];
+      const z = zs[i], def = z.def;
       z.t += dt;
+      z.animT += dt;
+      const step = z.animT >= 1 / ANIM_FPS;
+      if (step) z.animT = 0;
+
+      if (z.gone || (z.state === 'dying' && z.t > z.corpseT + 2)) {
+        game.scene.remove(z.group);
+        zs.splice(i, 1);
+        continue;
+      }
+      if (z.state === 'dying') { if (step) pose(z); continue; }
+
       const dxp = player.pos.x - z.x, dzp = player.pos.z - z.z;
       const dist = Math.hypot(dxp, dzp);
 
       if (z.state === 'rising') {
-        const k = Math.min(z.t / 1.1, 1);
-        z.group.position.set(z.x, -1.9 * (1 - k) * (1 - k), z.z);
-        if (k >= 1) { z.state = 'chase'; z.t = 0; }
-        continue;
-      }
-      if (z.state === 'dying') {
-        const k = Math.min(z.t / 0.45, 1);
-        z.group.rotation.x = -k * Math.PI / 2;
-        z.group.position.y = z.t > 1.2 ? -(z.t - 1.2) * 0.6 : 0.15 * k;
-        if (z.t > 2.4) { game.scene.remove(z.group); zs.splice(i, 1); }
+        z.group.position.x = z.x; z.group.position.z = z.z;
+        if (step) pose(z);
+        if (z.t >= def.rise) { z.state = 'chase'; z.t = 0; z.group.position.y = 0; }
         continue;
       }
 
       z.groanT -= dt;
       if (z.groanT <= 0) {
         z.groanT = 4 + Math.random() * 7;
-        if (dist < 22) game.audio.groan(Math.max(0.04, 0.22 * (1 - dist / 22)));
+        if (dist < 22) {
+          if (z.type === 'crawler') game.audio.screech(); else game.audio.groan(Math.max(0.04, 0.22 * (1 - dist / 22)));
+        }
       }
 
       if (z.state === 'attack') {
-        if (!z.attackDone && z.t >= 0.38) {
+        if (!z.attackDone && z.t >= def.hitAt) {
           z.attackDone = true;
           game.audio.zombieSwing();
-          if (dist < 1.9 && player.jumpHeight < 1.4) game.damagePlayer(30, z);
+          if (dist < def.reach + 0.6 && player.jumpHeight < 1.4) game.damagePlayer(def.dmg, z);
         }
-        if (z.t >= 0.95) { z.state = 'chase'; z.t = 0; }
-        const swing = Math.sin(Math.min(z.t / 0.5, 1) * Math.PI);
-        z.armL.rotation.x = z.armR.rotation.x = -1.5 - swing * 0.9;
         z.yaw = Math.atan2(dxp, dzp);
-        z.group.rotation.y = z.yaw;
+        if (step) pose(z);
+        if (z.t >= def.attackDur) { z.state = 'chase'; z.t = 0; }
         continue;
       }
 
       // chase
-      if (dist < 1.3) {
-        z.state = 'attack'; z.t = 0; z.attackDone = false;
+      if (dist < def.reach) {
+        z.state = 'attack'; z.t = 0; z.attackDone = false; z.animT = 1;
         continue;
       }
+      if (z.stun > 0) { z.stun -= dt; if (step) pose(z); continue; }
+
       world.flowTarget(z.x, z.z, player.pos.x, player.pos.z, tmp);
       let dx = tmp.x - z.x, dz = tmp.z - z.z;
       const len = Math.hypot(dx, dz) || 1;
@@ -213,37 +372,29 @@ export class ZombieDirector {
       z.x += dx * z.speed * dt;
       z.z += dz * z.speed * dt;
 
-      // keep zombies from stacking inside each other
+      // keep enemies from stacking inside each other
       for (let j = 0; j < zs.length; j++) {
         if (j === i) continue;
         const o = zs[j];
         if (o.dead || o.state === 'rising') continue;
+        const min = def.radius + o.def.radius;
         const ox = z.x - o.x, oz = z.z - o.z, d2 = ox * ox + oz * oz;
-        if (d2 < 0.5 && d2 > 1e-6) {
-          const d = Math.sqrt(d2), push = (0.707 - d) * 0.5 / d;
+        if (d2 < min * min && d2 > 1e-6) {
+          const d = Math.sqrt(d2), push = (min - d) * (o.type === 'brute' && z.type !== 'brute' ? 0.9 : 0.5) / d;
           z.x += ox * push; z.z += oz * push;
         }
       }
       tmp.x = z.x; tmp.z = z.z;
-      world.collideCircle(tmp, RADIUS);
+      world.collideCircle(tmp, def.radius);
       z.x = tmp.x; z.z = tmp.z;
 
-      // turn toward travel direction
       const want = Math.atan2(dx, dz);
       let diff = want - z.yaw;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
       z.yaw += diff * Math.min(1, dt * 8);
-      z.group.rotation.y = z.yaw;
-      z.group.position.set(z.x, 0, z.z);
-
-      z.phase += dt * z.speed * 3.2;
-      const s = Math.sin(z.phase);
-      z.legL.rotation.x = s * 0.7;
-      z.legR.rotation.x = -s * 0.7;
-      z.armL.rotation.x = -1.45 + s * 0.18;
-      z.armR.rotation.x = -1.45 - s * 0.18;
-      z.torso.rotation.z = s * 0.05;
-      z.head.rotation.z = Math.sin(z.phase * 0.5) * 0.12;
+      z.group.position.x = z.x; z.group.position.z = z.z;
+      z.phase += dt * z.speed * (z.type === 'crawler' ? 4.5 : z.type === 'brute' ? 2.6 : 3.4);
+      if (step) pose(z);
     }
   }
 }

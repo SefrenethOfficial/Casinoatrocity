@@ -38,6 +38,20 @@ export class Hud {
 
   damage() { this.vig = 1; }
 
+  // Blood spatter on the "lens". Fades out on its own.
+  blood(count = 1) {
+    const box = $('bloodscreen');
+    for (let i = 0; i < count && box.childElementCount < 14; i++) {
+      const el = document.createElement('i');
+      const size = 90 + Math.random() * 220;
+      // keep the middle of the screen mostly clear so you can still aim
+      const side = Math.random() < 0.5 ? Math.random() * 28 : 72 + Math.random() * 28;
+      el.style.cssText = `left:${side}%;top:${Math.random() * 100}%;width:${size}px;height:${size * (0.6 + Math.random() * 0.7)}px;transform:translate(-50%,-50%) rotate(${Math.random() * 360}deg)`;
+      box.appendChild(el);
+      setTimeout(() => el.remove(), 2600);
+    }
+  }
+
   announce(main, sub = '', secs = 3) {
     $('announce-main').textContent = main;
     $('announce-sub').textContent = sub;
@@ -74,16 +88,17 @@ export class Hud {
 
     const s = weapons.slot, def = weapons.def;
     if (s) {
-      this.set('ammo-mag', String(s.mag));
-      this.set('ammo-res', '/ ' + s.reserve);
+      this.set('ammo-mag', def.melee ? '\u2014' : String(s.mag));
+      this.set('ammo-res', def.melee ? '' : '/ ' + s.reserve);
       this.set('weapon-name', weapons.reloading ? 'Reloading…' : def.name);
-      const low = s.mag <= Math.ceil(def.mag * 0.25);
+      const low = !def.melee && s.mag <= Math.ceil(def.mag * 0.25);
       if (this.cache.low !== low) { this.cache.low = low; $('ammo').classList.toggle('low', low); }
-      const slotKey = weapons.slots.map(x => x.id).join(',') + weapons.cur;
+      const slotKey = weapons.slots.map(x => x.id).join(',') + weapons.cur + weapons.knifeOut;
       if (this.cache.slots !== slotKey) {
         this.cache.slots = slotKey;
         $('slots').innerHTML = weapons.slots.map((x, i) =>
-          `<span class="${i === weapons.cur ? 'on' : ''}">${i + 1} ${WEAPONS[x.id].name}</span>`).join('');
+          `<span class="${i === weapons.cur && !weapons.knifeOut ? 'on' : ''}">${i + 1} ${WEAPONS[x.id].name}</span>`).join('')
+          + `<span class="${weapons.knifeOut ? 'on' : ''}">3 ${WEAPONS.knife.name}</span>`;
       }
       // crosshair: spreads with bloom/movement, hidden while aiming
       const gap = Math.round(6 + (def.spread * 260) + weapons.bloom * 400 + Math.min(player.speed2d, 7) * 1.2);

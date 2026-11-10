@@ -5,7 +5,9 @@ import { save, loadSave, writeSave } from './save.js';
 import { AudioSys } from './audio.js';
 import { World, BOX_COST } from './world.js';
 import { Player } from './player.js';
-import { WeaponSystem, Effects } from './weapons.js';
+import { WeaponSystem } from './weapons.js';
+import { Effects } from './gore.js';
+import { PsxPipeline, installVertexSnap } from './psx.js';
 import { ZombieDirector } from './zombies.js';
 import { Hud } from './hud.js';
 import { CaseUI } from './cases.js';
@@ -26,21 +28,21 @@ class Game {
     loadSave();
     const canvas = $('game');
     this.canvas = canvas;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    installVertexSnap();
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(1);
     this.renderer.autoClear = false;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.psx = new PsxPipeline(this.renderer);
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0a0407);
-    this.scene.fog = new THREE.Fog(0x0a0407, 18, 62);
-    this.camera = new THREE.PerspectiveCamera(save.settings.fov, 1, 0.05, 200);
+    this.scene.background = new THREE.Color(0x050308);
+    this.scene.fog = new THREE.Fog(0x050308, 5, 34);
+    this.camera = new THREE.PerspectiveCamera(save.settings.fov, 1, 0.05, 120);
 
     this.audio = new AudioSys();
     this.audio.setVolume(save.settings.volume);
     this.world = new World(this.scene);
-    this.effects = new Effects(this.scene);
+    this.effects = new Effects(this.scene, this.world);
     this.player = new Player(this);
     this.weapons = new WeaponSystem(this);
     this.zombies = new ZombieDirector(this);
@@ -82,6 +84,7 @@ class Game {
     this.drops.length = 0;
     this._setBoxModel(null);
     this.box.state = 'idle';
+    this.effects.clear();
   }
 
   startZombies() {
@@ -94,7 +97,7 @@ class Game {
     this.wasLocked = false;
     this.showScreen(null);
     this.hud.show(true);
-    this.hud.announce('ZOMBIES', 'Survive the casino floor', 3);
+    this.hud.announce('ZOMBIES', 'Something is awake under the casino', 3);
     this.lockPointer();
   }
 
@@ -192,22 +195,66 @@ class Game {
     return t;
   }
 
-  onZombieHit(z, damage, head, headMult, point, dir, melee = false) {
-    const amount = this.instaT > 0 ? 1e9 : damage * (head ? headMult : 1);
+  onZombieHit(z, damage, head, headMult, point, dir, opts = {}) {
+    const insta = this.instaT > 0;
+    const amount = insta ? 1e9 : damage * (head ? headMult : 1);
     const killed = this.zombies.damage(z, amount);
-    this.effects.burst(point, head ? 0x8a0f1c : 0x5d0a14, killed ? 9 : 4, 2.6, dir);
+    const fx = this.effects, g = z.def.gore;
+    fx.blood(point, killed ? 16 : 7, 3.4, dir);
+    if (Math.random() < 0.6) {
+      const far = 0.3 + Math.random() * 1.4;
+      fx.floorDecal(point.x + dir.x * far, point.z + dir.z * far, (0.35 + Math.random() * 0.5) * g);
+    }
     this.hud.hitmarker(killed, head);
-    if (killed) {
-      this.kills++;
-      save.totalKills++;
-      if (head) this.headshots++;
-      this.addPoints(melee ? 130 : head ? 100 : 60);
-      this.addChips(head ? 5 : 3);
-      this.audio.kill();
-      this._maybeDrop(z);
-    } else {
+    if (!killed) {
       this.addPoints(10);
       if (head) this.audio.headshot(); else this.audio.hit();
+      return;
+    }
+    this.kills++;
+    save.totalKills++;
+    if (head) this.headshots++;
+    let mode = 'normal';
+    if (opts.gib || (insta && !opts.melee)) mode = 'gib';
+    else if (head || (opts.slice && Math.random() < 0.5)) mode = 'head';
+    this._goreKill(z, mode, dir);
+    this.addPoints(z.def.points + (head ? 40 : 0) + (opts.melee ? 70 : 0));
+    this.addChips(z.def.chips + (head ? 2 : 0));
+    this.audio.kill();
+    const p = this.player.pos;
+    if (Math.hypot(z.x - p.x, z.z - p.z) < 3.2) this.hud.blood(mode === 'gib' ? 3 : 1);
+    this._maybeDrop(z);
+  }
+
+  // Dismemberment. 'gib' bursts the whole body, 'head' takes the head off, 'normal' may lose an arm.
+  _goreKill(z, mode, dir) {
+    const fx = this.effects, g = z.def.gore, rnd = (a, b) => a + Math.random() * (b - a);
+    const c = new THREE.Vector3(z.x, z.centerY, z.z);
+    this.audio.gore(mode === 'gib');
+    if (mode === 'gib') {
+      z.gone = true;
+      fx.gibs_(c, dir, Math.round(11 * g), 5.5, 0.26 * z.scale);
+      fx.blood(c, 34, 6, dir);
+      for (let i = 0; i < 5; i++) fx.floorDecal(z.x + rnd(-1.6, 1.6), z.z + rnd(-1.6, 1.6), rnd(0.7, 1.5) * g);
+      fx.floorDecal(z.x, z.z, 1.2 * g, 2.4 * g);
+      return;
+    }
+    fx.floorDecal(z.x, z.z, 0.6, rnd(1.6, 2.4) * g);   // the pool spreads under the corpse
+    const fling = new THREE.Vector3(dir.x * 3 + rnd(-1, 1), rnd(4, 6.5), dir.z * 3 + rnd(-1, 1));
+    if (mode === 'head' && z.head.visible) {
+      z.head.visible = false;
+      const neck = new THREE.Vector3(z.x, z.neckY, z.z);
+      fx.gib(neck, fling, 0.3 * z.scale, 1);
+      fx.gibs_(neck, dir, 3, 3.5, 0.12);
+      fx.fountain(neck, 1.3, 4.5);
+    } else if (z.type !== 'crawler' && Math.random() < 0.55) {
+      const arm = z.arms[(Math.random() * z.arms.length) | 0];
+      arm.visible = false;
+      const shoulder = new THREE.Vector3(z.x, z.neckY - 0.1 * z.scale, z.z);
+      fx.gib(shoulder, fling, 0.22 * z.scale, 1);
+      fx.fountain(shoulder, 0.8, 3);
+    } else {
+      fx.gibs_(c, dir, 2, 3, 0.14);
     }
   }
 
@@ -218,6 +265,7 @@ class Game {
     p.sinceHit = 0;
     p.shake = 0.05;
     this.hud.damage();
+    this.hud.blood(2);
     this.audio.hurt();
     if (p.health <= 0) { p.health = 0; this.gameOver(); }
   }
@@ -231,8 +279,7 @@ class Game {
 
   spawnDrop(type, x, z) {
     const def = POWERUPS[type];
-    const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.32),
-      new THREE.MeshStandardMaterial({ color: def.color, emissive: def.color, emissiveIntensity: 0.8, metalness: 0.4, roughness: 0.3 }));
+    const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(0.32), new THREE.MeshBasicMaterial({ color: def.color }));
     mesh.position.set(x, 1.1, z);
     this.scene.add(mesh);
     this.drops.push({ type, mesh, x, z, life: 26 });
@@ -369,7 +416,7 @@ class Game {
     if (this.state === 'playing') this.update(dt);
     else if (this.state === 'menu') this._menuCamera();
 
-    this.world.update(this.time);
+    this.world.update(Math.floor(this.time * 12) / 12);   // world animation is stepped too
     this.render();
     this.input.pressed.clear();
     this.input.mousePressed[0] = this.input.mousePressed[1] = this.input.mousePressed[2] = false;
@@ -388,7 +435,7 @@ class Game {
     if (this.state !== 'playing') return;   // died this frame
     this._interact();
 
-    const fov = save.settings.fov * this.weapons.fovScale() + (this.player.sprinting ? 4 : 0);
+    const fov = save.settings.fov * this.weapons.fovScale() + (this.player.sprinting ? (this.weapons.knifeOut ? 10 : 3) : 0);
     if (Math.abs(this.camera.fov - fov) > 0.01) {
       this.camera.fov += (fov - this.camera.fov) * Math.min(1, dt * 14);
       this.camera.updateProjectionMatrix();
@@ -398,25 +445,26 @@ class Game {
   }
 
   _menuCamera() {
-    const cx = this.world.sizeX / 2, cz = this.world.sizeZ / 2, a = this.time * 0.07;
-    this.camera.position.set(cx + Math.cos(a) * 9, 2.5, cz + Math.sin(a) * 6.5);
+    const cx = this.world.sizeX / 2, cz = this.world.sizeZ / 2, a = Math.floor(this.time * 15) / 15 * 0.07;
+    this.camera.position.set(cx + Math.cos(a) * 5, 2.2, cz + 1 + Math.sin(a) * 2.2);
     this.camera.lookAt(cx + Math.cos(a + 1.9) * 8, 1.5, cz + Math.sin(a + 1.9) * 8);
     if (this.camera.fov !== 70) { this.camera.fov = 70; this.camera.updateProjectionMatrix(); }
   }
 
   render() {
     const r = this.renderer;
-    r.clear();
+    this.psx.begin();
     r.render(this.scene, this.camera);
     if (this.state !== 'menu') {
       r.clearDepth();
       r.render(this.weapons.vmScene, this.weapons.vmCamera);
     }
+    this.psx.end();
   }
 
   resize() {
     const w = window.innerWidth, h = window.innerHeight;
-    this.renderer.setSize(w, h, false);
+    this.psx.setSize(w, h, save.settings.res);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.weapons.vmCamera.aspect = w / h;
@@ -457,7 +505,7 @@ class Game {
         if (e.code === 'Escape' || e.code === 'KeyP') { if (!this.locked || e.code === 'KeyP') { this.unlockPointer(); this.pause(); } return; }
         if (!i.keys.has(e.code)) i.pressed.add(e.code);
         i.keys.add(e.code);
-        if (['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'KeyF', 'KeyQ', 'KeyR'].includes(e.code)) e.preventDefault();
+        if (['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'KeyF', 'KeyQ', 'KeyR', 'KeyE'].includes(e.code)) e.preventDefault();
       } else if (this.state === 'paused' && e.code === 'Escape' && this.screen === 'pause' && performance.now() - this.pausedAt > 400) {
         this.resume();
       }
@@ -497,6 +545,7 @@ class Game {
     const s = save.settings;
     $('set-sens').value = s.sens; $('out-sens').textContent = Number(s.sens).toFixed(2);
     $('set-fov').value = s.fov; $('out-fov').textContent = s.fov + '°';
+    $('set-res').value = String(s.res);
     $('set-vol').value = s.volume; $('out-vol').textContent = Math.round(s.volume * 100) + '%';
   }
 
@@ -519,6 +568,7 @@ class Game {
     });
     $('set-sens').addEventListener('input', e => { save.settings.sens = parseFloat(e.target.value); this._syncSettings(); });
     $('set-fov').addEventListener('input', e => { save.settings.fov = parseInt(e.target.value, 10); this._syncSettings(); });
+    $('set-res').addEventListener('change', e => { save.settings.res = parseInt(e.target.value, 10); this.resize(); });
     $('set-vol').addEventListener('input', e => {
       save.settings.volume = parseFloat(e.target.value);
       this.audio.setVolume(save.settings.volume);

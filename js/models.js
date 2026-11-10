@@ -4,13 +4,25 @@ import { SKINS } from './data.js';
 
 const texCache = new Map();
 
-export function canvasTexture(w, h, draw) {
-  const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  draw(c.getContext('2d'), w, h);
+// Textures are drawn at a comfortable size, then crushed down and sampled with nearest-neighbour
+// filtering and no mipmaps, which is where the chunky PSX texel look comes from.
+export function canvasTexture(w, h, draw, shrink = 4) {
+  const big = document.createElement('canvas');
+  big.width = w; big.height = h;
+  draw(big.getContext('2d'), w, h);
+  let c = big;
+  if (shrink > 1) {
+    c = document.createElement('canvas');
+    c.width = Math.max(8, Math.round(w / shrink)); c.height = Math.max(8, Math.round(h / shrink));
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = true;
+    g.drawImage(big, 0, 0, c.width, c.height);
+  }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
+  t.magFilter = THREE.NearestFilter;
+  t.minFilter = THREE.NearestFilter;
+  t.generateMipmaps = false;
   return t;
 }
 
@@ -99,34 +111,29 @@ function drawPattern(g, w, h, skin) {
 function skinMaterials(skin) {
   if (!skin) {
     return {
-      body: new THREE.MeshStandardMaterial({ color: 0x4a4e58, metalness: 0.35, roughness: 0.45 }),
-      accent: new THREE.MeshStandardMaterial({ color: 0x6a4a2c, metalness: 0.05, roughness: 0.8 }),
+      body: new THREE.MeshLambertMaterial({ color: 0x5a5e68 }),
+      accent: new THREE.MeshLambertMaterial({ color: 0x6a4a2c }),
     };
   }
   let tex = texCache.get(skin.id);
   if (!tex) {
-    tex = canvasTexture(128, 128, (g, w, h) => drawPattern(g, w, h, skin));
+    tex = canvasTexture(128, 128, (g, w, h) => drawPattern(g, w, h, skin), 2);
     texCache.set(skin.id, tex);
   }
-  const body = new THREE.MeshStandardMaterial({ map: tex, metalness: 0.25, roughness: 0.5 });
+  const body = new THREE.MeshLambertMaterial({ map: tex });
   if (skin.pattern === 'gold') {
-    // no environment map in this game, so fake the sheen with a little self-illumination
-    body.metalness = 0.45; body.roughness = 0.28;
-    body.emissive = new THREE.Color(skin.c1); body.emissiveMap = tex; body.emissiveIntensity = 0.22;
+    body.emissive = new THREE.Color(skin.c1); body.emissiveMap = tex; body.emissiveIntensity = 0.3;
   }
   if (skin.pattern === 'neon') {
-    body.emissive = new THREE.Color(skin.c2);
-    body.emissiveMap = tex;
-    body.emissiveIntensity = 1.4;
+    body.emissive = new THREE.Color(skin.c2); body.emissiveMap = tex; body.emissiveIntensity = 1.2;
   }
-  const accent = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(skin.accent), metalness: 0.2, roughness: 0.55,
-  });
+  const accent = new THREE.MeshLambertMaterial({ color: new THREE.Color(skin.accent) });
   return { body, accent };
 }
 
-const DARK = new THREE.MeshStandardMaterial({ color: 0x23252b, metalness: 0.4, roughness: 0.45 });
-const GLASS = new THREE.MeshStandardMaterial({ color: 0x224466, metalness: 0.9, roughness: 0.1, emissive: 0x0a1a2a });
+const DARK = new THREE.MeshLambertMaterial({ color: 0x2a2c33 });
+const GLASS = new THREE.MeshLambertMaterial({ color: 0x224466, emissive: 0x0a1a2a });
+const STEEL = new THREE.MeshLambertMaterial({ color: 0xb8bcc4 });
 
 function box(parent, mat, sx, sy, sz, x, y, z, rx = 0) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
@@ -213,6 +220,16 @@ const BUILDERS = {
     box(g, DARK, 0.008, 0.14, 0.008, -0.03, -0.04, -0.6, 0.2);
     return [0, 0.04, -0.78];
   },
+  knife(g, m) {
+    // blade edge-up, held out in front; a factory knife has a bare steel blade
+    const blade = m.skinned ? m.body : STEEL;
+    box(g, m.accent, 0.026, 0.034, 0.11, 0, 0, 0.02);
+    box(g, DARK, 0.05, 0.05, 0.014, 0, 0, -0.04);
+    box(g, blade, 0.008, 0.04, 0.17, 0, 0.004, -0.13);
+    box(g, blade, 0.008, 0.028, 0.05, 0, 0.012, -0.235, 0.35);
+    box(g, DARK, 0.03, 0.04, 0.02, 0, 0, 0.082);
+    return [0, 0, -0.26];
+  },
   revolver(g, m) {
     box(g, m.body, 0.03, 0.04, 0.22, 0, 0.05, -0.16);
     box(g, m.body, 0.03, 0.06, 0.1, 0, 0.03, -0.02);
@@ -228,7 +245,9 @@ const BUILDERS = {
 // Returns a group with the gun pointing along -Z and `userData.muzzle` (local Vector3).
 export function buildWeaponModel(weaponId, skin = null) {
   const g = new THREE.Group();
-  const mats = skinMaterials(typeof skin === 'string' ? SKINS[skin] : skin);
+  const skinObj = typeof skin === 'string' ? SKINS[skin] : skin;
+  const mats = skinMaterials(skinObj);
+  mats.skinned = !!skinObj;
   const muzzle = (BUILDERS[weaponId] || BUILDERS.pistol)(g, mats);
   g.userData.muzzle = new THREE.Vector3(...muzzle);
   g.userData.ownMaterials = [mats.body, mats.accent];
@@ -248,9 +267,9 @@ const iconCache = new Map();
 function ensureIconRenderer() {
   if (iconRenderer || iconFailed) return;
   try {
-    iconRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
+    iconRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: false, preserveDrawingBuffer: true });
     iconRenderer.setPixelRatio(1);
-    iconRenderer.setSize(320, 160);
+    iconRenderer.setSize(192, 96);   // tiny on purpose: icons are shown pixelated
     iconScene = new THREE.Scene();
     iconScene.add(new THREE.AmbientLight(0xffffff, 1.3));
     const d = new THREE.DirectionalLight(0xffffff, 2.4);
