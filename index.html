@@ -11,7 +11,7 @@
     // new files after an update. Bump BUILD whenever anything in js/ or css/ changes: every game
     // file is then requested under a new address, so nobody is left running a stale copy.
     (function () {
-      var BUILD = '6';
+      var BUILD = '7';
       var files = ['audio', 'cases', 'data', 'gore', 'hud', 'main', 'models', 'player', 'psx', 'save', 'weapons', 'world', 'zombies'];
       var imports = { three: './lib/three.module.js' };
       files.forEach(function (f) { imports['./js/' + f + '.js'] = './js/' + f + '.js?v=' + BUILD; });
@@ -57,8 +57,8 @@
   <section id="screen-menu" class="screen">
     <div class="menu-wrap">
       <div class="logo">
-        <div class="logo-top">CASINO</div>
-        <div class="logo-bottom">ATROCITY</div>
+        <div class="logo-top"><span class="ll" data-ch="C">C</span><span class="ll" data-ch="A">A</span><span class="ll" data-ch="S">S</span><span class="ll" data-ch="I">I</span><span class="ll" data-ch="N">N</span><span class="ll" data-ch="O">O</span></div>
+        <div class="logo-bottom"><span class="ll" data-ch="A">A</span><span class="ll" data-ch="T">T</span><span class="ll" data-ch="R">R</span><span class="ll" data-ch="O">O</span><span class="ll" data-ch="C">C</span><span class="ll" data-ch="I">I</span><span class="ll" data-ch="T">T</span><span class="ll" data-ch="Y">Y</span></div>
         <div class="logo-tag">Under the casino floor, the house collects in blood.</div>
       </div>
       <nav class="menu-nav">
@@ -126,6 +126,39 @@
         <div id="armory-preview"></div>
         <div id="armory-grid" class="grid"></div>
       </div>
+    </div>
+  </section>
+
+  <!-- Hidden panel -->
+  <section id="screen-admin" class="screen hidden">
+    <div class="panel wide admin">
+      <h2>Admin</h2>
+      <p class="admin-note">Toggles persist for the session and apply when you play. Round and run actions take effect in an active game.</p>
+      <div class="admin-grid">
+        <button class="btn small adm-toggle" data-admin="god">God mode</button>
+        <button class="btn small adm-toggle" data-admin="infAmmo">Infinite ammo</button>
+        <button class="btn small adm-toggle" data-admin="infPoints">Infinite points</button>
+        <button class="btn small adm-toggle" data-admin="oneShot">One-shot kills</button>
+      </div>
+      <div class="admin-row">
+        <label>Start / set round <input type="number" id="adm-round" min="1" max="999" value="1"></label>
+        <button class="btn small" data-admin-act="round">Set round</button>
+      </div>
+      <div class="admin-grid">
+        <button class="btn small" data-admin-act="points">+100,000 points</button>
+        <button class="btn small" data-admin-act="maxammo">Max ammo</button>
+        <button class="btn small" data-admin-act="doors">Open all doors</button>
+        <button class="btn small" data-admin-act="revolver">Give revolver</button>
+        <button class="btn small" data-admin-act="sniper">Give sniper</button>
+        <button class="btn small" data-admin-act="lmg">Give LMG</button>
+        <button class="btn small" data-admin-act="chips">+10,000 chips</button>
+        <button class="btn small" data-admin-act="skins">Unlock all skins</button>
+      </div>
+      <div class="admin-row">
+        <span id="adm-msg"></span>
+        <button class="btn small danger" data-admin-act="wipe">Reset progress</button>
+      </div>
+      <div class="row"><button class="btn primary" data-act="admin-back">Close</button></div>
     </div>
   </section>
 

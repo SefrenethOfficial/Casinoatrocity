@@ -161,6 +161,7 @@ export class WeaponSystem {
   update(dt, input) {
     const game = this.game, s = this.slot, def = this.def;
     if (!s) return;
+    if (game.admin && game.admin.infAmmo && def && !def.melee) { s.mag = def.mag; s.reserve = def.reserve; }
     this.fireT -= dt;
     this.meleeT -= dt;
     if (this.switchT > 0) this.switchT -= dt;

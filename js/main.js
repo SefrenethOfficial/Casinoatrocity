@@ -12,9 +12,11 @@ import { ZombieDirector } from './zombies.js';
 import { Hud } from './hud.js';
 import { CaseUI } from './cases.js';
 import { buildWeaponModel, disposeWeaponModel } from './models.js';
+import { SKIN_LIST } from './data.js';
+import { ownsSkin, addSkin } from './save.js';
 
 const $ = id => document.getElementById(id);
-const SCREENS = ['menu', 'cases', 'armory', 'settings', 'pause', 'over'];
+const SCREENS = ['menu', 'cases', 'armory', 'settings', 'pause', 'over', 'admin'];
 const POWERUPS = {
   max:    { name: 'MAX AMMO',      color: 0x3dff7a },
   double: { name: 'DOUBLE POINTS', color: 0xffd65e },
@@ -61,6 +63,7 @@ class Game {
     this.box = { state: 'idle', t: 0, cycleT: 0, weapon: null, model: null };
     this.resetRun();
 
+    this.admin = { god: false, infAmmo: false, infPoints: false, oneShot: false, startRound: 1 };
     this._bindEvents();
     this._bindMenus();
     this.resize();
@@ -95,6 +98,7 @@ class Game {
     this.player.reset(this.world.playerSpawn);
     this.weapons.reset();
     this.zombies.reset();
+    if (this.admin.startRound > 1) this.zombies.round = this.admin.startRound - 1;
     this.state = 'playing';
     this.wasLocked = false;
     this.showScreen(null);
@@ -166,6 +170,7 @@ class Game {
   }
 
   spend(cost) {
+    if (this.admin.infPoints) { this.audio.buy(); return true; }
     if (this.points < cost) { this.audio.deny(); this.hud.popup('Not enough points', '#ff7a7a'); return false; }
     this.points -= cost;
     this.audio.buy();
@@ -206,7 +211,7 @@ class Game {
   }
 
   onZombieHit(z, damage, head, headMult, point, dir, opts = {}) {
-    const insta = this.instaT > 0;
+    const insta = this.instaT > 0 || this.admin.oneShot;
     const amount = insta ? 1e9 : damage * (head ? headMult : 1);
     const killed = this.zombies.damage(z, amount);
     const fx = this.effects, g = z.def.gore, acid = !!z.def.acid;
@@ -275,6 +280,7 @@ class Game {
   damagePlayer(amount) {
     const p = this.player;
     if (this.state !== 'playing') return;
+    if (this.admin.god) return;
     p.health -= amount;
     p.sinceHit = 0;
     p.shake = 0.05;
@@ -587,6 +593,82 @@ class Game {
     else if (name === 'settings') this._syncSettings();
   }
 
+  _bindAdmin() {
+    // Secret: click the title letters O, then C, then I to open the hidden panel.
+    const seq = [];
+    document.querySelectorAll('.logo .ll').forEach(el => {
+      el.addEventListener('click', () => {
+        seq.push(el.dataset.ch);
+        if (seq.length > 3) seq.shift();
+        if (seq.join('') === 'OCI') { seq.length = 0; this._openAdmin(); }
+      });
+    });
+    const toggle = (k, btn) => { this.admin[k] = !this.admin[k]; btn.classList.toggle('on', this.admin[k]); };
+    document.querySelectorAll('#screen-admin .adm-toggle').forEach(btn => {
+      btn.addEventListener('click', () => toggle(btn.dataset.admin, btn));
+    });
+    document.querySelectorAll('#screen-admin [data-admin-act]').forEach(btn => {
+      btn.addEventListener('click', () => this._adminAct(btn.dataset.adminAct));
+    });
+  }
+
+  _openAdmin() {
+    for (const btn of document.querySelectorAll('#screen-admin .adm-toggle')) {
+      btn.classList.toggle('on', !!this.admin[btn.dataset.admin]);
+    }
+    $('adm-round').value = this.state === 'playing' ? Math.max(1, this.zombies.round) : this.admin.startRound;
+    $('adm-msg').textContent = '';
+    this.settingsReturn = this.screen;
+    this.showScreen('admin');
+  }
+
+  _adminMsg(t) { $('adm-msg').textContent = t; }
+
+  _adminAct(act) {
+    const playing = this.state === 'playing';
+    const round = Math.max(1, Math.min(999, parseInt($('adm-round').value, 10) || 1));
+    switch (act) {
+      case 'round':
+        this.admin.startRound = round;
+        if (playing) {
+          for (const z of this.zombies.zombies) this.scene.remove(z.group);
+          this.zombies.zombies.length = 0; this.zombies.hitMeshes.length = 0;
+          this.zombies.toSpawn = 0; this.zombies.round = round - 1;
+          this.zombies.phase = 'intermission'; this.zombies.phaseT = 0.8;
+          this._adminMsg('Jumping to round ' + round + '\u2026');
+        } else this._adminMsg('Next game starts at round ' + round + '.');
+        break;
+      case 'points':
+        if (playing) { this.points += 100000; this._adminMsg('+100,000 points'); } else this._adminMsg('Start a game first.');
+        break;
+      case 'maxammo':
+        if (playing) { this.weapons.maxAmmo(); this._adminMsg('Ammo refilled.'); } else this._adminMsg('Start a game first.');
+        break;
+      case 'doors':
+        if (playing) { for (let k = 1; k <= 9; k++) this.world.openDoor(k); this._adminMsg('All doors open.'); }
+        else this._adminMsg('Start a game first.');
+        break;
+      case 'revolver': case 'sniper': case 'lmg':
+        if (playing) { this.weapons.give(act); this._adminMsg('Gave ' + WEAPONS[act].name + '.'); } else this._adminMsg('Start a game first.');
+        break;
+      case 'chips':
+        save.chips += 10000; writeSave(); this.cases.refreshChips(); this._adminMsg('+10,000 chips');
+        break;
+      case 'skins': {
+        let n = 0;
+        for (const sk of SKIN_LIST) if (!ownsSkin(sk.id)) { addSkin(sk.id); n++; }
+        writeSave(); this.cases.refreshChips();
+        this._adminMsg(n ? 'Unlocked ' + n + ' skins.' : 'Everything already owned.');
+        break;
+      }
+      case 'wipe':
+        if (confirm('Reset all chips, skins and records? This cannot be undone.')) {
+          this.wiping = true; localStorage.removeItem('casinoatrocity.save.v1'); location.reload();
+        }
+        break;
+    }
+  }
+
   _syncSettings() {
     const s = save.settings;
     $('set-sens').value = s.sens; $('out-sens').textContent = Number(s.sens).toFixed(2);
@@ -596,6 +678,7 @@ class Game {
   }
 
   _bindMenus() {
+    this._bindAdmin();
     // every button gets the interface click
     document.addEventListener('click', e => { if (e.target.closest('button')) { this.audio.unlock(); this.audio.click(); } }, true);
     document.addEventListener('click', e => {
@@ -609,6 +692,7 @@ class Game {
       else if (act === 'quit') this.quitToMenu();
       else if (act === 'settings') { this.settingsReturn = this.screen; this.showScreen('settings'); }
       else if (act === 'settings-back') { writeSave(); this.showScreen(this.settingsReturn); }
+      else if (act === 'admin-back') { this.showScreen('menu'); }
       else if (act === 'menu' || act === 'cases' || act === 'knives' || act === 'armory') {
         if (this.cases.spinning) return;
         if (this.state === 'over') { this.state = 'menu'; this.hud.show(false); this.zombies.reset(); this.zombies.phase = 'idle'; this.resetRun(); }
