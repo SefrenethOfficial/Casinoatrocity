@@ -45,7 +45,7 @@ export const WEAPONS = {
   lmg: {
     name: 'House Edge', auto: true, rpm: 720, damage: 46, pellets: 1, headMult: 2,
     mag: 100, reserve: 300, reload: 4.2, spread: 0.022, adsSpread: 0.008, recoil: 0.011,
-    hip: [0.18, -0.22, -0.38], ads: [0, -0.12, -0.26], adsFov: 0.78, sound: 'lmg', pierce: 2, boxOnly: true, mobility: 0.76,
+    hip: [0.18, -0.22, -0.38], ads: [0, -0.12, -0.26], adsFov: 0.78, sound: 'lmg', pierce: 2, boxOnly: true, cost: 4000, mobility: 0.76,
   },
   revolver: {
     name: 'The Jackpot', auto: false, rpm: 150, damage: 900, pellets: 1, headMult: 2,

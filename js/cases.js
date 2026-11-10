@@ -207,7 +207,7 @@ export class CaseUI {
       <dl><dt>Damage</dt><dd>${def.melee ? `${def.damage} slash / ${def.heavyDamage} stab` : def.damage + (def.pellets > 1 ? ' × ' + def.pellets : '')}</dd>
       ${def.melee ? '' : `<dt>Fire rate</dt><dd>${def.rpm} rpm${def.auto ? ' auto' : ''}</dd><dt>Magazine</dt><dd>${def.mag} / ${def.reserve}</dd>`}
       <dt>Move speed</dt><dd>${Math.round(def.mobility * 100)}%</dd>
-      <dt>Found</dt><dd>${def.melee ? 'Always carried' : w === 'pistol' ? 'Starting weapon' : def.boxOnly ? 'Mystery Slot only' : `Weapon rack, ${def.cost} pts`}</dd></dl></div>`;
+      <dt>Found</dt><dd>${def.melee ? 'Always carried' : w === 'pistol' ? 'Starting weapon' : def.boxOnly && def.cost ? `Mystery Slot, or the lab rack for ${def.cost} pts` : def.boxOnly ? 'Mystery Slot only' : `Weapon rack, ${def.cost} pts`}</dd></dl></div>`;
 
     const grid = $('armory-grid');
     grid.innerHTML = '';

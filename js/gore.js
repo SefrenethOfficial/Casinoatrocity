@@ -50,6 +50,7 @@ export class Effects {
     // Particles share a handful of materials so the pool stays cheap.
     this.pGeo = new THREE.BoxGeometry(0.09, 0.09, 0.09);
     this.bloodMats = BLOOD.map(c => new THREE.MeshBasicMaterial({ color: c }));
+    this.acidMats = [0x3dff7a, 0x1fae58, 0x8aff4a, 0x16803c].map(c => new THREE.MeshBasicMaterial({ color: c }));
     this.sparkMat = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
     this.dustMat = new THREE.MeshBasicMaterial({ color: 0x6a6570 });
     for (let i = 0; i < 220; i++) {
@@ -67,6 +68,10 @@ export class Effects {
         map: tex, color: c, alphaTest: 0.5, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
       }));
     }
+    // acid splashes glow, so they are unlit
+    this.acidDecalMats = texes.map(tex => new THREE.MeshBasicMaterial({
+      map: tex, color: 0x2fd866, alphaTest: 0.5, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    }));
     const dGeo = new THREE.PlaneGeometry(1, 1);
     for (let i = 0; i < 130; i++) {
       const m = new THREE.Mesh(dGeo, this.decalMats[i % this.decalMats.length]);
@@ -76,6 +81,7 @@ export class Effects {
     }
 
     this.gibMats = FLESH.map(c => new THREE.MeshLambertMaterial({ color: c }));
+    this.acidGibMats = [0x3dff7a, 0x9ab8a0, 0x1fae58].map(c => new THREE.MeshBasicMaterial({ color: c }));
     const gGeo = new THREE.BoxGeometry(1, 1, 1);
     for (let i = 0; i < 44; i++) {
       const m = new THREE.Mesh(gGeo, this.gibMats[i % this.gibMats.length]);
@@ -105,7 +111,7 @@ export class Effects {
     t.life = 0.06;
   }
 
-  _particle(pos, mat, speed, dirBias, blood, up = 0.2) {
+  _particle(pos, mat, speed, dirBias, blood, up = 0.2, acid = false) {
     const p = this.particles[this.pi++ % this.particles.length];
     p.mesh.position.copy(pos);
     p.mesh.material = mat;
@@ -115,6 +121,7 @@ export class Effects {
     p.mesh.scale.setScalar(0.5 + Math.random() * 1.1);
     p.life = 0.5 + Math.random() * 0.5;
     p.blood = blood;
+    p.acid = acid;
   }
 
   // Sparks/dust where a bullet hits stone.
@@ -122,8 +129,9 @@ export class Effects {
     for (let i = 0; i < count; i++) this._particle(pos, i % 2 ? this.sparkMat : this.dustMat, speed, null, false);
   }
 
-  blood(pos, count, speed, dirBias = null) {
-    for (let i = 0; i < count; i++) this._particle(pos, this.bloodMats[(Math.random() * 4) | 0], speed, dirBias, true, 0.5);
+  blood(pos, count, speed, dirBias = null, acid = false) {
+    const mats = acid ? this.acidMats : this.bloodMats;
+    for (let i = 0; i < count; i++) this._particle(pos, mats[(Math.random() * 4) | 0], speed, dirBias, true, 0.5, acid);
   }
 
   muzzle(pos) {
@@ -131,18 +139,19 @@ export class Effects {
     this.flash.intensity = 70;
   }
 
-  _decal() {
+  _decal(acid = false) {
     const m = this.decals[this.di++ % this.decals.length];
-    m.material = this.decalMats[(Math.random() * this.decalMats.length) | 0];
+    const mats = acid ? this.acidDecalMats : this.decalMats;
+    m.material = mats[(Math.random() * mats.length) | 0];
     m.visible = true;
     const gi = this.growing.findIndex(g => g.mesh === m);
     if (gi >= 0) this.growing.splice(gi, 1);
     return m;
   }
 
-  floorDecal(x, z, size, growTo = 0) {
+  floorDecal(x, z, size, growTo = 0, acid = false) {
     if (this.world.blockedAt(x, z)) return;
-    const m = this._decal();
+    const m = this._decal(acid);
     m.rotation.set(-Math.PI / 2, 0, Math.random() * 6.28);
     // tiny per-decal height offset stops overlapping splats z-fighting
     m.position.set(x, 0.015 + (this.di % 40) * 0.0006, z);
@@ -150,18 +159,20 @@ export class Effects {
     if (growTo > size) this.growing.push({ mesh: m, target: growTo });
   }
 
-  wallDecal(point, normal, size) {
-    const m = this._decal();
+  wallDecal(point, normal, size, acid = false) {
+    const m = this._decal(acid);
     m.position.copy(point).addScaledVector(normal, 0.03);
     m.lookAt(tmpN.copy(point).add(normal));
     m.rotateZ(Math.random() * 6.28);
     m.scale.set(size, size, 1);
   }
 
-  gib(pos, vel, size, matIndex = -1) {
+  gib(pos, vel, size, matIndex = -1, acid = false) {
     const g = this.gibs[this.gi++ % this.gibs.length];
     g.mesh.position.copy(pos);
-    g.mesh.material = this.gibMats[matIndex >= 0 ? matIndex : (Math.random() * this.gibMats.length) | 0];
+    const mats = acid ? this.acidGibMats : this.gibMats;
+    g.mesh.material = mats[matIndex >= 0 ? matIndex % mats.length : (Math.random() * mats.length) | 0];
+    g.acid = acid;
     g.mesh.scale.set(size * (0.7 + Math.random() * 0.6), size * (0.7 + Math.random() * 0.6), size * (0.7 + Math.random() * 0.6));
     g.mesh.visible = true;
     g.vel.copy(vel);
@@ -173,12 +184,12 @@ export class Effects {
   }
 
   // Burst of chunks in every direction, biased along `dir`.
-  gibs_(pos, dir, count, speed, size) {
+  gibs_(pos, dir, count, speed, size, acid = false) {
     const v = new THREE.Vector3();
     for (let i = 0; i < count; i++) {
       v.set(Math.random() - 0.5, Math.random() * 0.9 + 0.2, Math.random() - 0.5).normalize().multiplyScalar(speed * (0.5 + Math.random()));
       if (dir) v.addScaledVector(dir, speed * 0.5);
-      this.gib(pos, v, size * (0.6 + Math.random() * 0.8));
+      this.gib(pos, v, size * (0.6 + Math.random() * 0.8), -1, acid);
     }
   }
 
@@ -202,7 +213,7 @@ export class Effects {
       p.mesh.position.addScaledVector(p.vel, dt);
       const pos = p.mesh.position;
       if (pos.y < 0.04) {
-        if (p.blood && Math.random() < 0.3) this.floorDecal(pos.x, pos.z, 0.25 + Math.random() * 0.45);
+        if (p.blood && Math.random() < 0.3) this.floorDecal(pos.x, pos.z, 0.25 + Math.random() * 0.45, 0, p.acid);
         p.life = 0;
       }
       if (p.life <= 0) p.mesh.visible = false;
@@ -219,7 +230,7 @@ export class Effects {
         if (pos.y < WALL_H && world.blockedAt(pos.x, pos.z) && !world.blockedAt(px, pz)) {
           // bounce off walls and leave a smear where it hit
           tmpN.set(px - pos.x, 0, pz - pos.z).normalize();
-          if (pos.y > 0.3 && Math.random() < 0.6) this.wallDecal(new THREE.Vector3(px, pos.y, pz), tmpN, 0.5 + Math.random() * 0.6);
+          if (pos.y > 0.3 && Math.random() < 0.6) this.wallDecal(new THREE.Vector3(px, pos.y, pz), tmpN, 0.5 + Math.random() * 0.6, g.acid);
           pos.x = px; pos.z = pz;
           g.vel.x *= -0.35; g.vel.z *= -0.35;
         }
@@ -228,14 +239,14 @@ export class Effects {
         const half = g.size * 0.5;
         if (pos.y < half) {
           pos.y = half;
-          if (!g.landed || Math.abs(g.vel.y) > 2) this.floorDecal(pos.x, pos.z, 0.5 + Math.random() * 0.7);
+          if (!g.landed || Math.abs(g.vel.y) > 2) this.floorDecal(pos.x, pos.z, 0.5 + Math.random() * 0.7, 0, g.acid);
           g.landed = true;
           g.vel.y *= -0.32; g.vel.x *= 0.55; g.vel.z *= 0.55;
           g.spin.multiplyScalar(0.4);
           if (Math.abs(g.vel.y) < 0.6) g.vel.y = 0;
         }
         g.dripT -= dt;
-        if (g.dripT <= 0 && !g.landed) { g.dripT = 0.07; this._particle(pos, this.bloodMats[0], 0.8, null, true, 0); }
+        if (g.dripT <= 0 && !g.landed) { g.dripT = 0.07; this._particle(pos, (g.acid ? this.acidMats : this.bloodMats)[0], 0.8, null, true, 0, g.acid); }
       }
       if (g.life < 1.5) g.mesh.visible = Math.sin(g.life * 30) > 0;   // blink out
       if (g.life <= 0) g.mesh.visible = false;

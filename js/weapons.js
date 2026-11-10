@@ -60,7 +60,7 @@ export class WeaponSystem {
   get def() { const s = this.slot; return s ? WEAPONS[s.id] : null; }
   get reloading() { return this.reloadT > 0; }
   // Name shown on the HUD: the gun's name, or whichever knife type is equipped.
-  get displayName() { return this.knifeOut ? KNIFE_MODELS[this.knifeModel || 'shiv'] : this.def.name; }
+  get displayName() { return this.knifeOut ? KNIFE_MODELS[this.knifeModel || 'shiv'] : this.def.name + (this.slot.up ? ' Mk II' : ''); }
   get knifeName() { const s = equippedSkin('knife'); return KNIFE_MODELS[(s && s.model) || 'shiv']; }
 
   reset() {
@@ -95,6 +95,15 @@ export class WeaponSystem {
   }
   maxAmmo() {
     for (const s of this.slots) s.reserve = WEAPONS[s.id].reserve;
+  }
+  // The lab's overclock station: the held gun does double damage for the rest of the run.
+  overclock() {
+    const s = this.slot;
+    if (!s || this.knifeOut || s.up) return false;
+    s.up = true;
+    s.mag = WEAPONS[s.id].mag;
+    s.reserve = WEAPONS[s.id].reserve;
+    return true;
   }
 
   select(i, force = false) {
@@ -234,7 +243,7 @@ export class WeaponSystem {
           if (pierced >= def.pierce || struck.has(z) || z.dead) continue;
           struck.add(z);
           const gib = !!def.gibRange && h.distance < def.gibRange;
-          game.onZombieHit(z, def.damage * Math.pow(0.7, pierced), h.object.userData.part === 'head', def.headMult, h.point, dir, { gib });
+          game.onZombieHit(z, def.damage * (s.up ? 2 : 1) * Math.pow(0.7, pierced), h.object.userData.part === 'head', def.headMult, h.point, dir, { gib });
           pierced++;
           lastFlesh = h.distance;
           if (pierced >= def.pierce) end = h.point;

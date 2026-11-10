@@ -7,11 +7,12 @@ A PSX-styled browser FPS built with [three.js](https://threejs.org/). Survive ro
 ## What's in it
 
 - **PSX look** — rendered at 240p (360p/480p in Settings), wobbling snapped vertices, chunky unfiltered textures, 15-bit dithered colour and stop-motion animation.
-- **Zombies mode** — endless rounds in a torch-lit dungeon. Ghouls shamble, crawlers sprint at you from round 3, horned brutes arrive from round 5.
+- **Zombies mode** — you start locked in one small, nearly empty room. Clearing a wave opens the next door, and each new room adds something: a weapon rack, the Mystery Slot, a shrine. Ghouls shamble, crawlers sprint at you from round 3, horned brutes arrive from round 5.
+- **The lab** — the tenth room is a laboratory. Once it opens the waves get much bigger, acid-blooded mutants pour out of the vents, and you can buy the LMG or overclock a gun for double damage.
 - **Gore** — heads come off, arms get severed, close shotgun blasts and big guns burst bodies into chunks, and blood pools, sprays up walls and spatters the screen.
 - **Slow with a gun, fast with a knife** — you move slowly with a gun out, and heavier guns are slower still. Draw the knife to move at 175% speed; it slashes (hold fire) and stabs (aim button).
 - **Seven guns** — pistol, SMG, shotgun, assault rifle, sniper, LMG and a golden revolver.
-- **Weapon racks, the Mystery Slot and shrines** — spend points mid-run on guns, ammo, a random weapon, double health or faster reloads.
+- **Weapon racks, the Mystery Slot and shrines** — spread through the rooms; spend points mid-run on guns, ammo, a random weapon, double health or faster reloads.
 - **Power-up drops** — Max Ammo, Double Points, Insta-Kill and Chip Bonus.
 - **Weapon cases** — three cases, a full-screen spinning reel, five rarities and 35 gun skins. Equip skins in the Armory or sell them back for chips.
 - **Knife crates** — a separate menu with three crates and 28 knives across seven types: shiv, cleaver, bayonet, machete, stiletto, karambit and butterfly knife (which flips open when you draw it). Knives are cosmetic; they all handle the same.

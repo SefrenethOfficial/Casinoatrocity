@@ -29,11 +29,14 @@ const MAT = {
   bruteSkin: [lam(0x7a5a4a), lam(0x5a6a5a), lam(0x6a5a6a)],
   bone: lam(0xd8ceb0), gore: lam(0x6a0509), iron: lam(0x2a2a30), claw: lam(0x1a1416),
   eyeRed: basic(0xff2a1a), eyeGreen: basic(0xb6ff3a), eyeOrange: basic(0xff9a1a),
+  mutantSkin: [lam(0xb8c8b0), lam(0xa8b8c0), lam(0xc8c0a8)], labRag: lam(0x8a9aa0), acid: basic(0x3dff7a),
 };
 
 export const ENEMY_TYPES = {
   ghoul:   { hp: 1,    speed: 1,    dmg: 30, reach: 1.35, radius: 0.36, points: 60,  chips: 3,  hitAt: 0.38, attackDur: 0.95, centerY: 1.15, neckY: 1.5,  rise: 1.1, gore: 1 },
   crawler: { hp: 0.5,  speed: 1.75, dmg: 18, reach: 1.3,  radius: 0.42, points: 50,  chips: 3,  hitAt: 0.24, attackDur: 0.7,  centerY: 0.5,  neckY: 0.6,  rise: 0.6, gore: 0.8 },
+  // lab-grown: fast, bleeds acid and bursts when it dies
+  mutant:  { hp: 1.25, speed: 1.45, dmg: 34, reach: 1.4,  radius: 0.36, points: 90,  chips: 5,  hitAt: 0.3,  attackDur: 0.8,  centerY: 1.15, neckY: 1.5,  rise: 0.8, gore: 1.3, acid: true },
   brute:   { hp: 5.5,  speed: 0.62, dmg: 55, reach: 1.95, radius: 0.6,  points: 250, chips: 12, hitAt: 0.62, attackDur: 1.35, centerY: 1.15, neckY: 1.55, rise: 1.6, gore: 2.2 },
 };
 
@@ -57,7 +60,8 @@ class Zombie {
     this.gone = false;      // set when gibbed: remove with no corpse
     this.stun = 0;
     this.fallDir = Math.random() < 0.5 ? 1 : -1;
-    this.scale = type === 'brute' ? 1.5 : rnd(0.92, 1.1);
+    this.scale = type === 'brute' ? 1.5 : type === 'mutant' ? rnd(1.12, 1.25) : rnd(0.92, 1.1);
+    this.rig = type === 'mutant' ? 'ghoul' : type;   // which skeleton/animation set it uses
     this.parts = [];
     this.legs = [];
     this.arms = [];
@@ -99,6 +103,27 @@ const BUILD = {
     z.legs = [z.add(GEO.gLeg, pants, 'body', -0.14, 0.82, 0), z.add(GEO.gLeg, pants, 'body', 0.14, 0.82, 0)];
     z.arms = [z.armL, z.armR];
   },
+  mutant(z) {
+    // a ghoul's frame stretched thin, wired with glowing tubes, one arm grown into a bone blade
+    const skin = pick(MAT.mutantSkin);
+    z.torso = z.add(GEO.gTorso, MAT.labRag, 'body', 0, 1.12, 0);
+    z.torso.rotation.x = 0.32;
+    z.torso.scale.set(0.82, 1, 0.9);
+    z.add(GEO.gRibs, MAT.acid, null, 0, 0.02, 0.15, z.torso);
+    z.add(GEO.cSpike, MAT.acid, null, -0.12, 0.2, -0.16, z.torso);
+    z.add(GEO.cSpike, MAT.acid, null, 0.12, 0.2, -0.16, z.torso);
+    z.head = z.add(GEO.gHead, skin, 'head', 0, 1.6, 0.16);
+    z.jaw = z.add(GEO.gJaw, MAT.gore, null, 0, -0.19, 0.05, z.head);
+    for (const sx of [-0.08, 0.08]) z.add(GEO.eye, MAT.eyeGreen, null, sx, 0.03, 0.155, z.head);
+    z.add(GEO.stain, MAT.acid, null, 0, 0.17, 0, z.head);
+    z.armL = z.add(GEO.gArm, skin, 'body', -0.3, 1.4, 0.1);
+    z.armR = z.add(GEO.gArm, skin, 'body', 0.3, 1.4, 0.1);
+    z.add(GEO.gClaw, MAT.claw, null, 0, -0.7, 0, z.armL);
+    const blade = z.add(GEO.gArm, MAT.bone, null, 0, -0.62, 0.02, z.armR);
+    blade.scale.set(0.5, 0.9, 1.3);
+    z.legs = [z.add(GEO.gLeg, MAT.pants[0], 'body', -0.13, 0.82, 0), z.add(GEO.gLeg, MAT.pants[0], 'body', 0.13, 0.82, 0)];
+    z.arms = [z.armL, z.armR];
+  },
   crawler(z) {
     const skin = pick(MAT.crawlerSkin);
     z.torso = z.add(GEO.cBody, skin, 'body', 0, 0.5, 0);
@@ -137,7 +162,7 @@ const BUILD = {
 
 // Stepped pose update. Called ~9 times a second per enemy.
 function pose(z) {
-  const g = z.group, type = z.type, s = Math.sin(z.phase), jit = () => Math.random() - 0.5;
+  const g = z.group, type = z.rig, s = Math.sin(z.phase), jit = () => Math.random() - 0.5;
   g.rotation.y = z.yaw;
 
   if (z.state === 'rising') {
@@ -209,7 +234,7 @@ export class ZombieDirector {
     this.phase = 'idle';      // idle | intermission | active
     this.phaseT = 0;
     this.flowT = 0;
-    this.maxAlive = 22;
+    this.maxAlive = 10;
     this.brutesLeft = 0;
   }
 
@@ -231,13 +256,16 @@ export class ZombieDirector {
     for (let r = 10; r < round; r++) hp *= 1.1;
     return Math.round(hp);
   }
-  countFor(round) { return Math.min(6 + 4 * (round - 1), 90); }
+  // Rooms are small, so early waves are modest. Once the lab opens (round 10+) there are far more.
+  countFor(round) { return Math.min(Math.round((5 + 3 * (round - 1)) * (round >= 10 ? 1.5 : 1)), 110); }
+  maxAliveFor(round) { return round >= 10 ? 30 : Math.min(8 + 2 * round, 22); }
   // Tuned against the player: slower than a gun-sprint early on, but only the knife outruns crawlers.
   speedFor(round) { return Math.min(1.15 + 0.2 * round, 3.2); }
 
   startRound() {
     this.round++;
     this.toSpawn = this.countFor(this.round);
+    this.maxAlive = this.maxAliveFor(this.round);
     this.brutesLeft = this.round >= 5 ? 1 + Math.floor((this.round - 5) / 3) : 0;
     this.phase = 'active';
     this.spawnT = 1.2;
@@ -247,24 +275,28 @@ export class ZombieDirector {
   pickType() {
     const r = this.round;
     if (this.brutesLeft > 0 && Math.random() < 0.12) { this.brutesLeft--; return 'brute'; }
+    if (r >= 10 && Math.random() < 0.3) return 'mutant';
     if (r >= 3 && Math.random() < Math.min(0.1 + 0.03 * r, 0.35)) return 'crawler';
     return 'ghoul';
   }
 
   spawn(type = this.pickType(), at = null) {
     const { world, player, audio } = this.game;
-    const spots = world.spawns;
-    const far = spots.filter(s => Math.hypot(s.x - player.pos.x, s.z - player.pos.z) > 12);
-    const s = at || pick(far.length ? far : spots);
+    let spots = world.spawnPoints(player.pos.x, player.pos.z);
+    if (type === 'mutant') {   // mutants come out of the lab vents when they can
+      const vents = spots.filter(p => p.room === 10);
+      if (vents.length) spots = vents;
+    }
+    const s = at || pick(spots);
     const def = ENEMY_TYPES[type];
-    const speed = Math.min(this.speedFor(this.round) * def.speed * rnd(0.8, 1.15), type === 'crawler' ? 5.4 : 3.6);
+    const speed = Math.min(this.speedFor(this.round) * def.speed * rnd(0.8, 1.15), type === 'crawler' ? 5.4 : type === 'mutant' ? 4.6 : 3.6);
     const z = new Zombie(type, s.x + rnd(-0.6, 0.6), s.z + rnd(-0.6, 0.6), Math.round(this.healthFor(this.round) * def.hp), speed);
     this.zombies.push(z);
     this.hitMeshes.push(...z.parts);
     this.game.scene.add(z.group);
     this.toSpawn--;
     if (type === 'brute') audio.roar();
-    else if (type === 'crawler') audio.screech();
+    else if (type === 'crawler' || type === 'mutant') audio.screech();
     return z;
   }
 

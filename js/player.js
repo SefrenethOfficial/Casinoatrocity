@@ -32,7 +32,7 @@ export class Player {
   reset(spawn) {
     this.pos.copy(spawn);
     this.vel.set(0, 0, 0);
-    this.yaw = Math.PI; this.pitch = 0; this.recoilPitch = 0;
+    this.yaw = -Math.PI / 2; this.pitch = 0; this.recoilPitch = 0;   // face the first door
     this.jumpHeight = 0; this.onGround = true;
     this.maxHealth = 100; this.health = 100; this.sinceHit = 99;
     this.shake = 0;

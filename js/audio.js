@@ -126,6 +126,11 @@ export class AudioSys {
     this._tone('sine', big ? 110 : 150, 50, big ? 0.28 : 0.14, big ? 0.5 : 0.25);
     if (big) this._noise(0.22, 'bandpass', 1700, 2, 0.2, 0.05, 500);
   }
+  door() {
+    this._noise(1.6, 'lowpass', 220, 1.5, 0.55, 0, 90);
+    this._tone('sawtooth', 48, 40, 1.5, 0.3);
+    this._noise(0.12, 'bandpass', 900, 2, 0.4, 1.5, 300);
+  }
   roar() {
     this._tone('sawtooth', 62, 38, 1.1, 0.4);
     this._noise(0.9, 'bandpass', 320, 2, 0.3, 0, 140);

@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { WEAPONS, BOX_POOL } from './data.js';
 import { save, loadSave, writeSave } from './save.js';
 import { AudioSys } from './audio.js';
-import { World, BOX_COST } from './world.js';
+import { World, BOX_COST, UPGRADE_COST } from './world.js';
 import { Player } from './player.js';
 import { WeaponSystem } from './weapons.js';
 import { Effects } from './gore.js';
@@ -85,6 +85,7 @@ class Game {
     this._setBoxModel(null);
     this.box.state = 'idle';
     this.effects.clear();
+    this.world.resetDoors();
   }
 
   startZombies() {
@@ -182,8 +183,12 @@ class Game {
     this.addChips(bonus);
     save.bestRound = Math.max(save.bestRound, round);
     writeSave();
-    this.hud.announce('ROUND CLEARED', `+${bonus} chips`, 3.2);
+    // each cleared wave opens the next door; the ninth opens the lab
+    const opened = this.world.openDoor(round);
+    const sub = !opened ? `+${bonus} chips` : round === 9 ? `+${bonus} chips \u2022 the lab is open` : `+${bonus} chips \u2022 a door grinds open`;
+    this.hud.announce('ROUND CLEARED', sub, 3.6);
     this.audio.roundEnd();
+    if (opened) this.audio.door();
   }
 
   shootTargets() {
@@ -199,11 +204,11 @@ class Game {
     const insta = this.instaT > 0;
     const amount = insta ? 1e9 : damage * (head ? headMult : 1);
     const killed = this.zombies.damage(z, amount);
-    const fx = this.effects, g = z.def.gore;
-    fx.blood(point, killed ? 16 : 7, 3.4, dir);
+    const fx = this.effects, g = z.def.gore, acid = !!z.def.acid;
+    fx.blood(point, killed ? 16 : 7, 3.4, dir, acid);
     if (Math.random() < 0.6) {
       const far = 0.3 + Math.random() * 1.4;
-      fx.floorDecal(point.x + dir.x * far, point.z + dir.z * far, (0.35 + Math.random() * 0.5) * g);
+      fx.floorDecal(point.x + dir.x * far, point.z + dir.z * far, (0.35 + Math.random() * 0.5) * g, 0, acid);
     }
     this.hud.hitmarker(killed, head);
     if (!killed) {
@@ -215,7 +220,7 @@ class Game {
     save.totalKills++;
     if (head) this.headshots++;
     let mode = 'normal';
-    if (opts.gib || (insta && !opts.melee)) mode = 'gib';
+    if (acid || opts.gib || (insta && !opts.melee)) mode = 'gib';
     else if (head || (opts.slice && Math.random() < 0.5)) mode = 'head';
     this._goreKill(z, mode, dir);
     this.addPoints(z.def.points + (head ? 40 : 0) + (opts.melee ? 70 : 0));
@@ -232,11 +237,15 @@ class Game {
     const c = new THREE.Vector3(z.x, z.centerY, z.z);
     this.audio.gore(mode === 'gib');
     if (mode === 'gib') {
+      const acid = !!z.def.acid;
       z.gone = true;
-      fx.gibs_(c, dir, Math.round(11 * g), 5.5, 0.26 * z.scale);
-      fx.blood(c, 34, 6, dir);
-      for (let i = 0; i < 5; i++) fx.floorDecal(z.x + rnd(-1.6, 1.6), z.z + rnd(-1.6, 1.6), rnd(0.7, 1.5) * g);
-      fx.floorDecal(z.x, z.z, 1.2 * g, 2.4 * g);
+      fx.gibs_(c, dir, Math.round(11 * g), 5.5, 0.26 * z.scale, acid);
+      fx.blood(c, 34, 6, dir, acid);
+      for (let i = 0; i < 5; i++) fx.floorDecal(z.x + rnd(-1.6, 1.6), z.z + rnd(-1.6, 1.6), rnd(0.7, 1.5) * g, 0, acid);
+      fx.floorDecal(z.x, z.z, 1.2 * g, 2.4 * g, acid);
+      // mutants burst: standing next to one when it dies hurts
+      const p = this.player.pos;
+      if (acid && Math.hypot(z.x - p.x, z.z - p.z) < 2.4) this.damagePlayer(15);
       return;
     }
     fx.floorDecal(z.x, z.z, 0.6, rnd(1.6, 2.4) * g);   // the pool spreads under the corpse
@@ -345,6 +354,16 @@ class Game {
         html = `${key}Buy ${pk.name} (${pk.desc}) <b>${pk.cost}</b>`;
         use = () => { if (this.spend(pk.cost)) this._grantPerk(pk); };
       }
+    } else if (it && it.type === 'upgrade') {
+      const w = this.weapons;
+      if (w.knifeOut) html = 'Hold a gun to overclock it';
+      else if (w.slot.up) html = `${w.displayName} is already overclocked`;
+      else {
+        html = `${key}Overclock ${w.def.name} (double damage) <b>${UPGRADE_COST}</b>`;
+        use = () => {
+          if (this.spend(UPGRADE_COST) && w.overclock()) this.hud.announce(w.displayName.toUpperCase(), 'double damage', 2.4);
+        };
+      }
     } else if (it && it.type === 'box') {
       const b = this.box;
       if (b.state === 'idle') {
@@ -445,9 +464,9 @@ class Game {
   }
 
   _menuCamera() {
-    const cx = this.world.sizeX / 2, cz = this.world.sizeZ / 2, a = Math.floor(this.time * 15) / 15 * 0.07;
-    this.camera.position.set(cx + Math.cos(a) * 5, 2.2, cz + 1 + Math.sin(a) * 2.2);
-    this.camera.lookAt(cx + Math.cos(a + 1.9) * 8, 1.5, cz + Math.sin(a + 1.9) * 8);
+    const [cx, cz0] = this.world.roomCenter(5), cz = cz0 - 1, a = Math.floor(this.time * 15) / 15 * 0.07;
+    this.camera.position.set(cx + Math.cos(a) * 2.2, 2.1, cz + 1 + Math.sin(a) * 2.2);
+    this.camera.lookAt(cx + Math.cos(a + 2.4) * 4, 1.4, cz + 1 + Math.sin(a + 2.4) * 4);
     if (this.camera.fov !== 70) { this.camera.fov = 70; this.camera.updateProjectionMatrix(); }
   }
 
