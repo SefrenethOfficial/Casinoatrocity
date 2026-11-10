@@ -43,6 +43,10 @@ python3 -m http.server 8000
 
 Then open http://localhost:8000.
 
+## Updating the live game
+
+After changing anything in `js/` or `css/`, bump the `BUILD` number near the top of `index.html`. It is added to every script and stylesheet address so browsers fetch the new files instead of reusing cached ones.
+
 ## Project layout
 
 - `index.html`, `css/style.css` — page, menus and HUD
