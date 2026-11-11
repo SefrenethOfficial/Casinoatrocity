@@ -1,23 +1,19 @@
 # Casinoatrocity
 
-A PSX-styled browser FPS built with [three.js](https://threejs.org/). Survive rounds of undead in the dungeon under the casino, then spend the chips you win on weapon cases.
+A PSX-styled browser FPS built with [three.js](https://threejs.org/). Check in to the Last Call Hotel, ride the elevator down, and survive a randomly generated, creepy old hotel — one dark floor at a time.
 
 **Play:** https://sefrenethofficial.github.io/Casinoatrocity/ (once GitHub Pages is enabled for this repo)
 
 ## What's in it
 
-- **PSX look** — rendered at 240p (360p/480p in Settings), wobbling snapped vertices, chunky unfiltered textures, 15-bit dithered colour and stop-motion animation.
-- **Zombies mode** — you start outside on a dark, rainy lawn and fight your way into the house. Nothing opens on its own: each barrier between areas is **bought with points** (COD-Zombies style) and stays open, so the map grows as you earn. Enemies only come from areas you've opened. Ghouls shamble, crawlers sprint at you from round 3, horned brutes arrive from round 5.
-- **The lab** — past the Vault, the final barrier opens the laboratory. Buying it spawns **The Warden**, a giant armored boss with a health bar, and from then on acid-blooded mutants pour from the vents and another Warden returns every few rounds. The LMG rack and the overclock station are down here too.
-- **Gore** — heads come off, arms get severed, close shotgun blasts and big guns burst bodies into chunks, and blood pools, sprays up walls and spatters the screen.
-- **Slow with a gun, fast with a knife** — you move slowly with a gun out, and heavier guns are slower still. Draw the knife to move at 175% speed; it slashes (hold fire) and stabs (aim button).
-- **Seven guns** — pistol, SMG, shotgun, assault rifle, sniper, LMG and a golden revolver.
-- **Eight named areas** — Rainy Lawn, Foyer, Casino Floor, Crypt, Boiler Room, Armoury, Gallery and Vault — each with its own weapon rack, shrine, Mystery Slot or ammo cache to spend points on.
-- **Power-up drops** — Max Ammo, Double Points, Insta-Kill and Chip Bonus.
-- **Weapon cases** — three cases, a full-screen spinning reel, five rarities and 35 gun skins. Equip skins in the Armory or sell them back for chips.
-- **Knife crates** — a separate menu with three crates and 28 knives across seven types: shiv, cleaver, bayonet, machete, stiletto, karambit and butterfly knife (which flips open when you draw it). Knives are cosmetic; they all handle the same.
-- **Gloved hands** — the first-person view shows black-gloved hands holding each weapon.
-- Chips, skins, settings and your best round are saved in your browser (localStorage). Chips are in-game only.
+- **The lobby** — you start outside the hotel in the rain, then walk into a cozy, fireplace-lit hallway. Podiums open the Weapon Cases, Knife Crates, Armory and Settings; an elevator takes you down into the game.
+- **The elevator** — a ride-down intermission (with its own music) where you can buy a **Flashlight** and **Lockpicks** with chips before the doors open.
+- **A randomly generated hotel** — every floor is a fresh maze of dark wooden rooms joined by **numbered doors**, some **locked** (pick them with a lockpick). Each room spawns its own monsters when you step in. Rooms are dark — bring a light. Find the **stairs down** to descend to a bigger, tougher floor.
+- **Enemies** — ghouls shamble, crawlers sprint at you from deeper floors, brutes soak damage and hit hard. Gore, dismemberment and blood included.
+- **A proper death screen** — when you die it tells you exactly what got you, where, and how to avoid it next time.
+- **PSX look** — rendered at 240p (360p/480p in Settings) with vertex wobble, chunky textures, dithering and choppy animation.
+- **Weapons & cosmetics** — pistol, SMG, shotgun, AR, sniper, LMG, revolver and a knife, plus weapon cases and knife crates with dozens of skins. Chips, skins, settings and your deepest floor are saved in your browser.
+- **Music** — Dawn of the Doors (lobby), Elevator Jam (elevator) and Guiding Light (death).
 
 ## Controls
 
@@ -30,15 +26,16 @@ A PSX-styled browser FPS built with [three.js](https://threejs.org/). Survive ro
 | Right mouse | Aim / knife stab |
 | R | Reload |
 | 1, 2 | Guns |
-| 3 or E | Knife (press again to go back to your gun) |
-| Q, mouse wheel | Cycle weapons |
+| 3 or E | Knife (you move fast with it out) |
+| Q, wheel | Cycle weapons |
 | V | Bash with the gun |
-| F | Buy / use |
-| Esc or P | Pause |
+| F | Open door / use |
+| L | Toggle flashlight |
+| Esc | Pause |
 
 ## Run it locally
 
-There is no build step, but browsers won't load JavaScript modules from `file://`, so serve the folder:
+No build step, but serve the folder (modules won't load from `file://`):
 
 ```
 python3 -m http.server 8000
@@ -46,23 +43,18 @@ python3 -m http.server 8000
 
 Then open http://localhost:8000.
 
-## Updating the live game
-
-After changing anything in `js/` or `css/`, bump the `BUILD` number near the top of `index.html`. It is added to every script and stylesheet address so browsers fetch the new files instead of reusing cached ones.
-
-## Credits
-
-Gunshot and interface click sounds are in `assets/sfx/` (by dev_guy and amaze98). Every other sound is synthesised in the browser.
-
 ## Project layout
 
-- `index.html`, `css/style.css` — page, menus and HUD
-- `js/main.js` — game loop, Zombies mode rules, menus
-- `js/psx.js` — low-res render target, vertex snapping and dither pass
-- `js/world.js` — the dungeon map, collision and enemy pathing
-- `js/player.js`, `js/weapons.js`, `js/zombies.js` — player, guns and knife, enemies
-- `js/gore.js` — blood, gibs, decals and bullet effects
+- `index.html`, `css/style.css` — page, menus, HUD, death and elevator screens
+- `js/main.js` — game loop, state flow (lobby → elevator → hotel → death)
+- `js/lobby.js` — the rainy exterior and cozy hall
+- `js/world.js` — the procedural hotel generator, collision and enemy pathing
+- `js/player.js`, `js/weapons.js`, `js/zombies.js` — player, guns/knife, enemies
+- `js/gore.js`, `js/psx.js` — blood/gibs and the PSX render pass
 - `js/cases.js`, `js/data.js`, `js/save.js` — cases, skins, weapon stats, saved progress
-- `js/models.js`, `js/audio.js` — procedural gun models and synthesised sound
-- `assets/sfx/` — recorded gunshot and click
-- `lib/` — three.js (MIT licence)
+- `js/models.js`, `js/audio.js`, `js/music.js` — procedural models, synth SFX, music
+- `assets/` — the music tracks and recorded SFX; `lib/` — three.js (MIT)
+
+## Updating the live game
+
+After changing anything in `js/` or `css/`, bump the `BUILD` number near the top of `index.html` so browsers fetch the new files instead of cached ones.

@@ -1,6 +1,5 @@
 // The dungeon's undead (ghouls, crawlers, brutes) plus the round/wave director for Zombies mode.
 import * as THREE from 'three';
-import { LAB_ROOM } from './world.js';
 
 const ANIM_FPS = 9;   // poses update at this rate on purpose: choppy, stop-motion movement
 const lam = c => new THREE.MeshLambertMaterial({ color: c });
@@ -256,10 +255,11 @@ export class ZombieDirector {
     this.phase = 'idle';      // idle | intermission | active
     this.phaseT = 0;
     this.flowT = 0;
-    this.maxAlive = 10;
-    this.brutesLeft = 0;
+    this.maxAlive = 16;
+    this.queue = [];
+    this._diff = 1;
+    this._points = [];
     this.boss = null;
-    this.bossWave = false;
   }
 
   reset() {
@@ -268,100 +268,44 @@ export class ZombieDirector {
     this.hitMeshes.length = 0;
     this.round = 0;
     this.toSpawn = 0;
-    this.phase = 'intermission';
-    this.phaseT = 3.5;
+    this.queue = [];
+    this.round = 0;
+    this._diff = 1;
+    this.phase = 'active';
     this.boss = null;
-    this.bossWave = false;
   }
 
   get alive() { return this.zombies.reduce((n, z) => n + (z.dead ? 0 : 1), 0); }
-  get remaining() { return this.toSpawn + this.alive; }
+  get remaining() { return this.queue.length + this.alive; }
 
-  healthFor(round) {
-    let hp = 120 + 60 * (Math.min(round, 10) - 1);
-    for (let r = 10; r < round; r++) hp *= 1.1;
-    return Math.round(hp);
-  }
-  // Rooms are small, so early waves are modest. Once the lab opens (round 10+) there are far more.
-  countFor(round) { return Math.min(Math.round((6 + 3 * (round - 1)) * (this.game.world.labOpen ? 1.5 : 1)), 110); }
-  maxAliveFor(round) { return this.game.world.labOpen ? 30 : Math.min(8 + 2 * round, 22); }
-  // Tuned against the player: slower than a gun-sprint early on, but only the knife outruns crawlers.
-  speedFor(round) { return Math.min(1.15 + 0.2 * round, 3.2); }
-  bossHP(round) { return 7000 + 3000 * Math.max(0, round - (this.game.world.labOpenRound + 1)); }
+  healthFor(d) { return Math.round(90 + 26 * d); }
+  speedFor(d) { return Math.min(1.1 + 0.11 * d, 3.2); }
 
-  startRound() {
-    this.round++;
-    this.toSpawn = this.countFor(this.round);
-    this.maxAlive = this.maxAliveFor(this.round);
-    this.brutesLeft = this.round >= 5 ? 1 + Math.floor((this.round - 5) / 3) : 0;
-    const w = this.game.world;
-    const bossBase = w.labOpenRound + 1;
-    this.bossWave = w.labOpen && this.round >= bossBase && (this.round - bossBase) % 5 === 0;
-    this.phase = 'active';
-    this.spawnT = 1.2;
-    this.game.onRoundStart(this.round);
-    if (this.bossWave) { this.toSpawn = Math.min(this.toSpawn, 12); this.spawnBoss(); }
+  // Queue a batch of monsters to rise from the given spawn points (one room's worth).
+  spawnRoom(points, count, difficulty) {
+    if (!points.length) return;
+    this._points = points;
+    this._diff = Math.max(this._diff, difficulty);
+    this.round = Math.max(this.round, difficulty);
+    for (let i = 0; i < count; i++) this.queue.push(points[(Math.random() * points.length) | 0]);
+    this.spawnT = Math.min(this.spawnT, 0.4);
   }
 
-  spawnBoss() {
-    const { world, player } = this.game;
-    const labs = world.spawns.filter(s => s.room === LAB_ROOM);
-    const spots = (labs.length ? labs : world.spawns).slice().sort((a, b) =>
-      Math.hypot(b.x - player.pos.x, b.z - player.pos.z) - Math.hypot(a.x - player.pos.x, a.z - player.pos.z));
-    const s = spots[0] || { x: player.pos.x, z: player.pos.z };
-    const z = new Zombie('boss', s.x, s.z, this.bossHP(this.round), Math.min(this.speedFor(this.round) * ENEMY_TYPES.boss.speed, 2.0));
-    this.zombies.push(z);
-    this.hitMeshes.push(...z.parts);
-    this.game.scene.add(z.group);
-    this.boss = z;
-    this.game.audio.roar();
-    this.game.onBossSpawn();
-  }
-
-  pickType() {
-    const r = this.round;
-    if (this.brutesLeft > 0 && Math.random() < 0.12) { this.brutesLeft--; return 'brute'; }
-    if (this.game.world.labOpen && Math.random() < 0.3) return 'mutant';
-    if (r >= 3 && Math.random() < Math.min(0.1 + 0.03 * r, 0.35)) return 'crawler';
+  pickType(d) {
+    if (d >= 6 && Math.random() < Math.min(0.08 + 0.015 * d, 0.24)) return 'brute';
+    if (d >= 3 && Math.random() < Math.min(0.12 + 0.03 * d, 0.4)) return 'crawler';
     return 'ghoul';
   }
 
-  spawn(type = this.pickType(), at = null) {
-    const { world, player, audio } = this.game;
-    let spots = world.spawnPoints(player.pos.x, player.pos.z);
-    if (type === 'mutant') {   // mutants come out of the lab vents when they can
-      const vents = spots.filter(p => p.room === LAB_ROOM);
-      if (vents.length) spots = vents;
-    }
-    const s = at || pick(spots);
-    const def = ENEMY_TYPES[type];
-    const speed = Math.min(this.speedFor(this.round) * def.speed * rnd(0.8, 1.15), type === 'crawler' ? 5.4 : type === 'mutant' ? 4.6 : 3.6);
-    const z = new Zombie(type, s.x + rnd(-0.6, 0.6), s.z + rnd(-0.6, 0.6), Math.round(this.healthFor(this.round) * def.hp), speed);
+  spawn(type, s, difficulty) {
+    const audio = this.game.audio, def = ENEMY_TYPES[type];
+    const speed = Math.min(this.speedFor(difficulty) * def.speed * rnd(0.8, 1.15), type === 'crawler' ? 5.4 : 3.6);
+    const z = new Zombie(type, s.x + rnd(-0.5, 0.5), s.z + rnd(-0.5, 0.5), Math.round(this.healthFor(difficulty) * def.hp), speed);
     this.zombies.push(z);
     this.hitMeshes.push(...z.parts);
     this.game.scene.add(z.group);
-    this.toSpawn--;
-    if (type === 'brute') audio.roar();
-    else if (type === 'crawler' || type === 'mutant') audio.screech();
+    if (type === 'brute') audio.roar(); else if (type === 'crawler') audio.screech();
     return z;
-  }
-
-  // After a door seals, anything left on the far side can never reach the player. Pull those
-  // enemies out and put them back in the queue so the wave can still be finished.
-  requeueStranded() {
-    const { world, player, scene } = this.game;
-    world.computeFlow(player.pos.x, player.pos.z);
-    for (let i = this.zombies.length - 1; i >= 0; i--) {
-      const z = this.zombies[i];
-      if (z.def.boss || world.reachable(z.x, z.z)) continue;
-      if (!z.dead) {
-        this.toSpawn++;
-        if (z.type === 'brute') this.brutesLeft++;
-        for (const p of z.parts) { const k = this.hitMeshes.indexOf(p); if (k >= 0) this.hitMeshes.splice(k, 1); }
-      }
-      scene.remove(z.group);
-      this.zombies.splice(i, 1);
-    }
   }
 
   // Returns true if the hit killed the enemy.
@@ -388,20 +332,11 @@ export class ZombieDirector {
   update(dt) {
     const game = this.game, { world, player } = game;
 
-    if (this.phase === 'intermission') {
-      this.phaseT -= dt;
-      if (this.phaseT <= 0) this.startRound();
-    } else if (this.phase === 'active') {
-      this.spawnT -= dt;
-      if (this.toSpawn > 0 && this.spawnT <= 0 && this.alive < this.maxAlive) {
-        this.spawn();
-        this.spawnT = Math.max(0.4, 2.2 - this.round * 0.16);
-      }
-      if (this.toSpawn <= 0 && this.alive === 0) {
-        this.phase = 'intermission';
-        this.phaseT = 7;
-        game.onRoundEnd(this.round);
-      }
+    this.spawnT -= dt;
+    if (this.queue.length && this.spawnT <= 0 && this.alive < this.maxAlive) {
+      const s = this.queue.shift() || this._points[(Math.random() * this._points.length) | 0];
+      if (s) this.spawn(this.pickType(this._diff), s, this._diff);
+      this.spawnT = Math.max(0.28, 0.9 - this._diff * 0.02);
     }
 
     this.flowT -= dt;

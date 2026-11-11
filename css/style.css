@@ -40,7 +40,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   background: radial-gradient(ellipse at 30% 40%, rgba(40, 8, 16, 0.55), rgba(5, 2, 3, 0.9));
 }
 #screen-cases, #screen-armory { background: linear-gradient(180deg, rgba(14, 5, 8, 0.97), rgba(8, 3, 5, 0.94)); }
-#screen-menu { display: flex; align-items: center; background: linear-gradient(90deg, rgba(8, 3, 5, 0.94) 0%, rgba(8, 3, 5, 0.75) 38%, rgba(8, 3, 5, 0.1) 75%); }
+#screen-splash { display: flex; align-items: center; background: linear-gradient(90deg, rgba(8, 3, 5, 0.94) 0%, rgba(8, 3, 5, 0.75) 38%, rgba(8, 3, 5, 0.1) 75%); }
 .menu-wrap { width: min(520px, 92vw); margin-left: clamp(18px, 7vw, 110px); padding: 24px 0; }
 .logo { font-family: var(--display); line-height: 0.86; margin-bottom: 34px; }
 .logo-top { font-size: clamp(54px, 9vw, 104px); color: var(--gold); letter-spacing: 0.04em; text-shadow: 0 0 28px rgba(255, 190, 60, 0.45); }
@@ -259,3 +259,22 @@ kbd:first-child { margin-left: 0; }
 @media (prefers-reduced-motion: reduce) {
   .btn, .popup, #result { transition: none; animation: none; }
 }
+
+
+/* ---- Lobby flow: elevator, death screen, HUD kit ---- */
+.elevator.panel { text-align: center; gap: 14px; }
+.elev-sub { margin: 0; color: var(--muted); font-size: 14px; }
+.elev-shop { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.elev-shop .btn { width: auto; text-align: center; }
+.elev-shop .btn:hover:not(:disabled) { transform: none; }
+.elev-have { margin: 0; font-size: 13px; color: var(--gold); letter-spacing: 0.06em; }
+.elevator .balance { justify-content: center; }
+
+.death.panel { gap: 14px; }
+.death-what { margin: 0; font-size: 18px; color: var(--text); }
+.death-tip { border: 1px solid var(--line); background: rgba(255,214,94,0.05); padding: 12px 16px; text-align: left; }
+.death-tip-label { font-family: var(--display); letter-spacing: 0.18em; text-transform: uppercase; font-size: 13px; color: var(--gold); }
+.death-tip p { margin: 6px 0 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+
+#kit { display: flex; gap: 14px; margin-top: 8px; font-family: var(--body); font-size: 12px; color: var(--muted); letter-spacing: 0.04em; text-shadow: none; }
+#kit b { color: var(--gold); font-weight: 700; }

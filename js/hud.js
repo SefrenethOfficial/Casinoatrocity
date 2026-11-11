@@ -14,6 +14,8 @@ export class Hud {
 
   show(on) { this.el.classList.toggle('hidden', !on); }
 
+  setPrompt(html) { this.set('prompt', html || '', 'innerHTML'); }
+
   set(id, value, prop = 'textContent') {
     const key = id + prop;
     if (this.cache[key] === value) return;
@@ -112,9 +114,11 @@ export class Hud {
 
     this.set('points', Math.floor(game.points).toLocaleString());
     this.set('session-chips', '+' + game.sessionChips);
-    this.set('round-num', String(Math.max(1, zombies.round)));
+    this.set('round-num', String(Math.max(1, game.floor)));
+    this.set('picks', String(game.lockpicks || 0));
+    this.set('lamp', game.hasLight ? (game.lightOn ? 'ON' : 'OFF') : '\u2014');
     this.style('health-fill', 'width', Math.max(0, (player.health / player.maxHealth) * 100).toFixed(0) + '%');
-    this.set('zleft', zombies.phase === 'active' ? `${zombies.remaining} LEFT` : '');
+    this.set('zleft', zombies.remaining > 0 ? `${zombies.remaining} IN THE ROOM` : 'ROOM CLEAR');
 
     const boss = zombies.boss;
     const showBoss = !!(boss && !boss.dead);

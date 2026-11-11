@@ -4,15 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Casinoatrocity</title>
-  <meta name="description" content="Casinoatrocity: a PSX-style three.js FPS. Survive the undead in the dungeon under the casino and open weapon cases.">
+  <meta name="description" content="Casinoatrocity: a PSX-style three.js FPS. Ride the elevator down into a randomly generated, creepy old hotel and survive.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%23b3121d'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23ffd65e' stroke-width='3' stroke-dasharray='4 3'/%3E%3C/svg%3E">
   <script>
-    // Cache busting. GitHub Pages lets browsers keep old scripts for a while, which can mix old and
-    // new files after an update. Bump BUILD whenever anything in js/ or css/ changes: every game
-    // file is then requested under a new address, so nobody is left running a stale copy.
     (function () {
-      var BUILD = '11';
-      var files = ['audio', 'cases', 'data', 'gore', 'hud', 'main', 'models', 'player', 'psx', 'save', 'weapons', 'world', 'zombies'];
+      var BUILD = '12';
+      var files = ['audio', 'cases', 'data', 'gore', 'hud', 'lobby', 'main', 'models', 'music', 'player', 'psx', 'save', 'weapons', 'world', 'zombies'];
       var imports = { three: './lib/three.module.js' };
       files.forEach(function (f) { imports['./js/' + f + '.js'] = './js/' + f + '.js?v=' + BUILD; });
       document.write('<script type="importmap">' + JSON.stringify({ imports: imports }) + '<\/script>');
@@ -31,20 +28,21 @@
     <div id="crosshair"><i class="ch t"></i><i class="ch b"></i><i class="ch l"></i><i class="ch r"></i><i class="dot"></i></div>
     <div id="hitmarker"></div>
 
-    <div id="hud-round"><span id="round-num">1</span><small>ROUND</small></div>
+    <div id="hud-round"><span id="round-num">1</span><small>FLOOR</small></div>
     <div id="hud-left">
       <div id="health"><div id="health-fill"></div></div>
       <div id="perks"></div>
+      <div id="kit"><span>Lockpicks <b id="picks">0</b></span><span>Light <b id="lamp">&mdash;</b></span></div>
     </div>
     <div id="hud-right">
       <div id="points">500</div>
       <div id="chips-line"><span class="chip-ico"></span><span id="session-chips">0</span></div>
-      <div id="weapon-name">M9 Dealer</div>
+      <div id="weapon-name">Knife</div>
       <div id="ammo"><span id="ammo-mag">12</span><span id="ammo-res">/ 96</span></div>
       <div id="slots"></div>
     </div>
     <div id="hud-top">
-      <div id="bossbar" class="hidden"><div id="bossbar-name">THE WARDEN</div><div id="bossbar-track"><div id="bossbar-fill"></div></div></div>
+      <div id="bossbar" class="hidden"><div id="bossbar-name"></div><div id="bossbar-track"><div id="bossbar-fill"></div></div></div>
       <div id="zleft"></div>
       <div id="powerups"></div>
     </div>
@@ -54,16 +52,16 @@
     <div id="lock-hint" class="hidden">Click to capture the mouse</div>
   </div>
 
-  <!-- Main menu -->
-  <section id="screen-menu" class="screen">
+  <!-- Splash / title -->
+  <section id="screen-splash" class="screen">
     <div class="menu-wrap">
       <div class="logo">
         <div class="logo-top"><span class="ll" data-ch="C">C</span><span class="ll" data-ch="A">A</span><span class="ll" data-ch="S">S</span><span class="ll" data-ch="I">I</span><span class="ll" data-ch="N">N</span><span class="ll" data-ch="O">O</span></div>
         <div class="logo-bottom"><span class="ll" data-ch="A">A</span><span class="ll" data-ch="T">T</span><span class="ll" data-ch="R">R</span><span class="ll" data-ch="O">O</span><span class="ll" data-ch="C">C</span><span class="ll" data-ch="I">I</span><span class="ll" data-ch="T">T</span><span class="ll" data-ch="Y">Y</span></div>
-        <div class="logo-tag">Under the casino floor, the house collects in blood.</div>
+        <div class="logo-tag">Check in at the Last Call Hotel. Nobody checks out.</div>
       </div>
       <nav class="menu-nav">
-        <button class="btn primary" data-act="play">Play Zombies</button>
+        <button class="btn primary" data-act="enter">Enter the Lobby</button>
         <button class="btn" data-act="cases">Weapon Cases</button>
         <button class="btn" data-act="knives">Knife Crates</button>
         <button class="btn" data-act="armory">Armory</button>
@@ -71,13 +69,31 @@
       </nav>
       <div class="menu-stats">
         <div><b class="chips" data-chips>0</b><span>chips</span></div>
-        <div><b id="stat-best">0</b><span>best round</span></div>
+        <div><b id="stat-best">0</b><span>deepest floor</span></div>
         <div><b id="stat-kills">0</b><span>total kills</span></div>
       </div>
       <div class="controls-help">
         <kbd>WASD</kbd> move <kbd>Shift</kbd> sprint <kbd>Space</kbd> jump <kbd>LMB</kbd> fire <kbd>RMB</kbd> aim
-        <kbd>R</kbd> reload <kbd>1</kbd><kbd>2</kbd> guns <kbd>3</kbd>/<kbd>E</kbd> knife <kbd>Q</kbd> cycle <kbd>V</kbd> gun bash <kbd>F</kbd> buy / use <kbd>Esc</kbd> pause
+        <kbd>R</kbd> reload <kbd>1</kbd><kbd>2</kbd> guns <kbd>3</kbd>/<kbd>E</kbd> knife <kbd>Q</kbd> cycle <kbd>V</kbd> bash <kbd>F</kbd> open / use <kbd>L</kbd> flashlight <kbd>Esc</kbd> pause
         <br>You are slow with a gun out. <b>Draw the knife to run.</b>
+      </div>
+    </div>
+  </section>
+
+  <!-- Elevator intermission -->
+  <section id="screen-elevator" class="screen hidden">
+    <div class="panel wide elevator">
+      <h2>Going Down</h2>
+      <p class="elev-sub">The elevator rattles down toward <b id="elev-floor">Floor 1</b>. Stock up before the doors open.</p>
+      <div class="elev-shop">
+        <button class="btn" id="buy-flash">Buy Flashlight &mdash; 300</button>
+        <button class="btn" id="buy-picks">Buy 3 Lockpicks &mdash; 150</button>
+      </div>
+      <p class="elev-have">You have: <span id="elev-have">0 lockpicks</span></p>
+      <div class="balance"><span class="chip-ico"></span><b data-chips>0</b> chips</div>
+      <div class="row">
+        <button class="btn primary" data-act="descend">Open the doors</button>
+        <button class="btn" data-act="elev-back">Back to lobby</button>
       </div>
     </div>
   </section>
@@ -85,7 +101,7 @@
   <!-- Weapon cases -->
   <section id="screen-cases" class="screen hidden">
     <header class="bar">
-      <button class="btn small" data-act="menu">&larr; Back</button>
+      <button class="btn small" data-act="back">&larr; Back</button>
       <h2 id="cases-title">Weapon Cases</h2>
       <div class="balance"><span class="chip-ico"></span><b data-chips>0</b></div>
     </header>
@@ -106,10 +122,7 @@
   <!-- Full-screen case roll -->
   <div id="roll" class="hidden">
     <div id="roll-title"></div>
-    <div id="reel-wrap">
-      <div id="reel-marker"></div>
-      <div id="reel"></div>
-    </div>
+    <div id="reel-wrap"><div id="reel-marker"></div><div id="reel"></div></div>
     <div id="result" class="hidden"></div>
     <div id="roll-hint"></div>
   </div>
@@ -117,7 +130,7 @@
   <!-- Armory / inventory -->
   <section id="screen-armory" class="screen hidden">
     <header class="bar">
-      <button class="btn small" data-act="menu">&larr; Back</button>
+      <button class="btn small" data-act="back">&larr; Back</button>
       <h2>Armory</h2>
       <div class="balance"><span class="chip-ico"></span><b data-chips>0</b></div>
     </header>
@@ -134,7 +147,7 @@
   <section id="screen-admin" class="screen hidden">
     <div class="panel wide admin">
       <h2>Admin</h2>
-      <p class="admin-note">Toggles persist for the session and apply when you play. Round and run actions take effect in an active game.</p>
+      <p class="admin-note">Toggles persist for the session. Run actions take effect in an active game.</p>
       <div class="admin-grid">
         <button class="btn small adm-toggle" data-admin="god">God mode</button>
         <button class="btn small adm-toggle" data-admin="infAmmo">Infinite ammo</button>
@@ -142,13 +155,14 @@
         <button class="btn small adm-toggle" data-admin="oneShot">One-shot kills</button>
       </div>
       <div class="admin-row">
-        <label>Start / set round <input type="number" id="adm-round" min="1" max="999" value="1"></label>
-        <button class="btn small" data-admin-act="round">Set round</button>
+        <label>Jump to floor <input type="number" id="adm-round" min="1" max="99" value="1"></label>
+        <button class="btn small" data-admin-act="floor">Go</button>
       </div>
       <div class="admin-grid">
         <button class="btn small" data-admin-act="points">+100,000 points</button>
         <button class="btn small" data-admin-act="maxammo">Max ammo</button>
         <button class="btn small" data-admin-act="doors">Open all doors</button>
+        <button class="btn small" data-admin-act="light">Flashlight + picks</button>
         <button class="btn small" data-admin-act="revolver">Give revolver</button>
         <button class="btn small" data-admin-act="sniper">Give sniper</button>
         <button class="btn small" data-admin-act="lmg">Give LMG</button>
@@ -184,25 +198,24 @@
       <h2>Paused</h2>
       <button class="btn primary" data-act="resume">Resume</button>
       <button class="btn" data-act="settings">Settings</button>
-      <button class="btn" data-act="quit">Cash out &amp; quit</button>
+      <button class="btn" data-act="quit">Quit to lobby</button>
     </div>
   </section>
 
-  <!-- Game over -->
-  <section id="screen-over" class="screen hidden">
-    <div class="panel wide">
-      <h2 class="bust">BUSTED</h2>
-      <p id="over-line"></p>
+  <!-- Death screen -->
+  <section id="screen-death" class="screen hidden">
+    <div class="panel wide death">
+      <h2 class="bust" id="death-title">GUEST DECEASED</h2>
+      <p id="death-what" class="death-what"></p>
+      <div class="death-tip"><span class="death-tip-label">How to survive it</span><p id="death-tip"></p></div>
       <div class="over-stats">
-        <div><b id="over-round">0</b><span>round</span></div>
-        <div><b id="over-kills">0</b><span>kills</span></div>
-        <div><b id="over-heads">0</b><span>headshots</span></div>
-        <div><b id="over-chips" class="chips">0</b><span>chips won</span></div>
+        <div><b id="death-floor">0</b><span>floor</span></div>
+        <div><b id="death-rooms">0</b><span>rooms</span></div>
+        <div><b id="death-kills">0</b><span>kills</span></div>
+        <div><b id="death-chips" class="chips">0</b><span>chips won</span></div>
       </div>
       <div class="row">
-        <button class="btn primary" data-act="play">Play again</button>
-        <button class="btn" data-act="cases">Open cases</button>
-        <button class="btn" data-act="menu">Menu</button>
+        <button class="btn primary" data-act="lobby">Back to the lobby</button>
       </div>
     </div>
   </section>
