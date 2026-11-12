@@ -24,6 +24,17 @@ const PALETTES = [
   { paper: '#7a6434', paper2: '#84703c', motif: 'rgba(90,30,30,0.45)', wood: '#402a18', trim: '#22140a', fabric: 0x2a2a4a, rugs: [['#5a1a22', '#2a1210'], ['#2a2a4a', '#12121e']] },
 ];
 
+// Tight collider footprints for furniture, in the piece's own local frame: [lx, lz, hw, hd].
+// lx/lz is the box centre offset from the cell centre (pieces sit with their back at z = -1),
+// hw/hd are half-width and half-depth. Two-cell pieces (bed, sofa) are offset by lx = 1.
+const FOOT = {
+  wardrobe: [0, -0.6, 0.76, 0.42], dresser: [0, -0.64, 0.76, 0.36], bookshelf: [0, -0.73, 0.82, 0.3],
+  desk: [0, -0.3, 0.76, 0.74], armchair: [0, -0.5, 0.52, 0.46], clock: [0, -0.76, 0.34, 0.26],
+  plant: [0, -0.5, 0.4, 0.4], luggage: [0, -0.52, 0.55, 0.4], crates: [0, -0.45, 0.55, 0.5],
+  bed: [1, -0.22, 1.12, 0.78], sofa: [1, -0.5, 1.42, 0.46],
+  trolley: [0, 0, 0.76, 0.42], linen: [0, 0, 0.68, 0.38],
+};
+
 const stainTex = () => tex(64, 64, (g, w, h) => {
   g.clearRect(0, 0, w, h);
   for (let i = 0; i < 26; i++) { const a = i * 2.4, d = (i * 7 % 22), r = 3 + (i * 5 % 9); g.fillStyle = i % 3 ? 'rgba(70,8,8,0.75)' : 'rgba(40,4,4,0.85)'; g.beginPath(); g.arc(32 + Math.cos(a) * d, 32 + Math.sin(a) * d, r, 0, 6.3); g.fill(); }
@@ -58,6 +69,8 @@ export class World {
     this.spawns = [];          // { x, z, room }
     this.interactables = [];
     this.solids = [];
+    this.obstacles = [];   // oriented boxes for furniture / carts / feature props
+    this.wallGrid = null;  // structural walls + doors only (furniture excluded), for player collision
     this.animated = [];
     this.lamps = [];
     this.playerSpawn = new THREE.Vector3();
@@ -72,6 +85,15 @@ export class World {
   blocked(cx, cz) { return (cx < 0 || cz < 0 || cx >= this.w || cz >= this.h) ? true : this.blockedGrid[cz * this.w + cx] === 1; }
   blockedAt(x, z) { return this.blocked(Math.floor(x / CELL), Math.floor(z / CELL)); }
   center(cx, cz) { return [(cx + 0.5) * CELL, (cz + 0.5) * CELL]; }
+  wallBlocked(cx, cz) { return (cx < 0 || cz < 0 || cx >= this.w || cz >= this.h) ? true : (this.wallGrid || this.blockedGrid)[cz * this.w + cx] === 1; }
+
+  // Register a furniture collider. (px, pz) is the push origin (cell centre); ry the piece's rotation;
+  // (lx, lz, hw, hd) its local footprint. The box is placed in world space, oriented by ry.
+  _obstacle(px, pz, ry, lx, lz, hw, hd) {
+    const c = Math.cos(ry), sn = Math.sin(ry);
+    this.obstacles.push({ x: px + lx * c + lz * sn, z: pz - lx * sn + lz * c, hw, hd, c, s: sn });
+  }
+  _foot(px, pz, ry, kind) { const f = FOOT[kind]; if (f) this._obstacle(px, pz, ry, f[0], f[1], f[2], f[3]); }
   roomAt(x, z) { const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL); return (cx < 0 || cz < 0 || cx >= this.w || cz >= this.h) ? 0 : this.roomOf[cz * this.w + cx]; }
   roomCenter(id) { const r = this.rooms[id - 1]; return r ? [r.cx, r.cz] : [this.w, this.h]; }
   roomSpawns(id) { return this.spawns.filter(s => s.room === id); }
@@ -189,6 +211,7 @@ export class World {
     scene.add(new THREE.AmbientLight(0x5a5048, 0.85));
     scene.add(new THREE.HemisphereLight(0x6a6258, 0x1a120c, 0.5));
 
+    this.wallGrid = this.blockedGrid.slice();   // structural only; furniture is added below as colliders
     for (const r of this.rooms) { if (r.used) this._dressRoom(r); else this.lamps.push(null); }
     for (const d of this.doors) this._buildDoor(d);
     this.solids.push(...S.build(scene));
@@ -256,13 +279,15 @@ export class World {
       block(a, b); want--;
       if (kind === 'wardrobe') { closets++; const [x, z] = this.center(a, b); this.interactables.push({ type: 'closet', x, z, ry: ROT[wall] }); }
       at(wall, i, B => (kind === 'armchair' || kind === 'sofa') ? furn[kind](B, M, this.fab) : furn[kind](B, M), S);
+      this._foot(...this.center(a, b), ROT[wall], kind);
     }
     // the odd cart left standing out in the room
     for (const [dx, dz] of [[2, 2], [4, 4], [4, 2], [2, 4]]) {
       if (rng() > 0.22) continue;
       const a = r.x0 + dx, b = r.z0 + dz, [x, z] = this.center(a, b);
       this.blockedGrid[b * w + a] = 1;
-      S.push(x, 0, z, rng() < 0.5 ? 0 : Math.PI / 2); (rng() < 0.5 ? furn.trolley : furn.linen)(S, M); S.pop();
+      const ry = rng() < 0.5 ? 0 : Math.PI / 2, kind = rng() < 0.5 ? 'trolley' : 'linen';
+      S.push(x, 0, z, ry); furn[kind](S, M); S.pop(); this._foot(x, z, ry, kind);
     }
     // pictures on a couple of the bare stretches of wall
     let pics = 1 + ((rng() * 3) | 0);
@@ -285,15 +310,15 @@ export class World {
         const dx = ns ? side : along, dz = ns ? along : side, a = r.x0 + dx, b = r.z0 + dz, [x, z] = this.center(a, b);
         this.blockedGrid[b * w + a] = 1; fn(x, z, side);
       };
-      put(sideA, outer[p], (x, z) => { S.push(x, 0, z, ns ? Math.PI / 2 : 0); (rng() < 0.5 ? furn.trolley : furn.linen)(S, M); S.pop(); });
+      put(sideA, outer[p], (x, z) => { const ry = ns ? Math.PI / 2 : 0, kind = rng() < 0.5 ? 'trolley' : 'linen'; S.push(x, 0, z, ry); furn[kind](S, M); S.pop(); this._foot(x, z, ry, kind); });
       if (!closet) {
         closet = true;
         put(sideB, outer[1 - p], (x, z, side) => {
           const ry = ns ? (side === 2 ? Math.PI / 2 : -Math.PI / 2) : (side === 2 ? 0 : Math.PI);
-          S.push(x, 0, z, ry); furn.wardrobe(S, M); S.pop();
+          S.push(x, 0, z, ry); furn.wardrobe(S, M); S.pop(); this._foot(x, z, ry, 'wardrobe');
           this.interactables.push({ type: 'closet', x, z, ry });
         });
-      } else if (rng() < 0.5) put(sideB, outer[1 - p], (x, z, side) => { const ry = ns ? (side === 2 ? Math.PI / 2 : -Math.PI / 2) : (side === 2 ? 0 : Math.PI); S.push(x, 0, z, ry); furn.crates(S, M); S.pop(); });
+      } else if (rng() < 0.5) put(sideB, outer[1 - p], (x, z, side) => { const ry = ns ? (side === 2 ? Math.PI / 2 : -Math.PI / 2) : (side === 2 ? 0 : Math.PI); S.push(x, 0, z, ry); furn.crates(S, M); S.pop(); this._foot(x, z, ry, 'crates'); });
       // sconces down the corridor walls
       for (const side of [2, 4]) { const dx = ns ? side : outer[0], dz = ns ? outer[0] : side, [x, z] = this.center(r.x0 + dx, r.z0 + dz); const ry = ns ? (side === 2 ? Math.PI / 2 : -Math.PI / 2) : (side === 2 ? 0 : Math.PI); if (!this.blockedGrid[(r.z0 + dz) * w + r.x0 + dx]) { D.push(x, 0, z, ry); furn.sconce(D, M, 2.3); D.pop(); } }
     }
@@ -313,7 +338,7 @@ export class World {
 
   _buildStairs(cx, cz) {
     const scene = this.scene, D = this.D, M = this.M;
-    this._blockCentre(cx, cz);
+    this._blockCentre(cx, cz); this._obstacle(cx, cz, 0, 0, 0, 0.95, 0.95);
     D.plane(new THREE.MeshBasicMaterial({ map: stairTex() }), 1.9, 1.9, cx, 0.03, cz);
     for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { D.box(M.dark, 0.12, 1.1, 0.12, cx + dx * 0.97, 0.55, cz + dz * 0.97); D.box(M.brass, 0.16, 0.06, 0.16, cx + dx * 0.97, 1.13, cz + dz * 0.97); }
     for (const y of [0.55, 1.0]) { D.box(M.dark, 0.06, 0.08, 1.94, cx - 0.97, y, cz); D.box(M.dark, 0.06, 0.08, 1.94, cx + 0.97, y, cz); D.box(M.dark, 1.94, 0.08, 0.06, cx, y, cz + 0.97); }
@@ -326,7 +351,7 @@ export class World {
 
   _buildFeature(r) {
     const f = r.feature, cx = r.cx, cz = r.cz;
-    this._blockCentre(cx, cz);
+    this._blockCentre(cx, cz); this._obstacle(cx, cz, 0, 0, 0, 0.84, 0.56);
     if (f.type === 'wallbuy') this._buildRack(cx, cz, f.weapon);
     else if (f.type === 'box') this._buildMystery(cx, cz);
     else if (f.type === 'perk') this._buildShrine(cx, cz, f.perk);
@@ -416,6 +441,7 @@ export class World {
     if (d.open) return false;
     d.open = true;
     this.blockedGrid[d.cz * this.w + d.cx] = 0;
+    if (this.wallGrid) this.wallGrid[d.cz * this.w + d.cx] = 0;
     const i = this.solids.indexOf(d.slab); if (i >= 0) this.solids.splice(i, 1);
     const [x, z] = this.center(d.cx, d.cz), side = px === undefined ? -1 : (d.vertical ? px - x : pz - z);
     d.swing = side > 0 ? Math.PI * 0.52 : -Math.PI * 0.52;
@@ -441,20 +467,43 @@ export class World {
 
   // ---- collision + flow ----
   collideCircle(p, r) {
-    for (let pass = 0; pass < 2; pass++) {
-      const x0 = Math.floor((p.x - r) / CELL), x1 = Math.floor((p.x + r) / CELL);
-      const z0 = Math.floor((p.z - r) / CELL), z1 = Math.floor((p.z + r) / CELL);
-      for (let cz = z0; cz <= z1; cz++) for (let cx = x0; cx <= x1; cx++) {
-        if (!this.blocked(cx, cz)) continue;
-        const minX = cx * CELL, maxX = minX + CELL, minZ = cz * CELL, maxZ = minZ + CELL;
-        const nx = Math.max(minX, Math.min(p.x, maxX)), nz = Math.max(minZ, Math.min(p.z, maxZ));
-        const dx = p.x - nx, dz = p.z - nz, d2 = dx * dx + dz * dz;
-        if (d2 >= r * r) continue;
-        if (d2 > 1e-9) { const d = Math.sqrt(d2), push = (r - d) / d; p.x += dx * push; p.z += dz * push; }
-        else { const l = p.x - minX, rr = maxX - p.x, t = p.z - minZ, b = maxZ - p.z, m = Math.min(l, rr, t, b); if (m === l) p.x = minX - r; else if (m === rr) p.x = maxX + r; else if (m === t) p.z = minZ - r; else p.z = maxZ + r; }
-      }
-    }
+    this._collideWalls(p, r);
+    for (const o of this.obstacles) this._collideBox(p, r, o);
+    this._collideWalls(p, r);   // a second wall pass in case a box pushed us into one
     return p;
+  }
+
+  // Structural walls and closed doors only (furniture is handled by _collideBox).
+  _collideWalls(p, r) {
+    const x0 = Math.floor((p.x - r) / CELL), x1 = Math.floor((p.x + r) / CELL);
+    const z0 = Math.floor((p.z - r) / CELL), z1 = Math.floor((p.z + r) / CELL);
+    for (let cz = z0; cz <= z1; cz++) for (let cx = x0; cx <= x1; cx++) {
+      if (!this.wallBlocked(cx, cz)) continue;
+      const minX = cx * CELL, maxX = minX + CELL, minZ = cz * CELL, maxZ = minZ + CELL;
+      const nx = Math.max(minX, Math.min(p.x, maxX)), nz = Math.max(minZ, Math.min(p.z, maxZ));
+      const dx = p.x - nx, dz = p.z - nz, d2 = dx * dx + dz * dz;
+      if (d2 >= r * r) continue;
+      if (d2 > 1e-9) { const d = Math.sqrt(d2), push = (r - d) / d; p.x += dx * push; p.z += dz * push; }
+      else { const l = p.x - minX, rr = maxX - p.x, t = p.z - minZ, b = maxZ - p.z, m = Math.min(l, rr, t, b); if (m === l) p.x = minX - r; else if (m === rr) p.x = maxX + r; else if (m === t) p.z = minZ - r; else p.z = maxZ + r; }
+    }
+  }
+
+  // Circle vs oriented box, resolved in the box's local frame.
+  _collideBox(p, r, o) {
+    const dx = p.x - o.x, dz = p.z - o.z;
+    const lx = dx * o.c - dz * o.s, lz = dx * o.s + dz * o.c;
+    const clx = Math.max(-o.hw, Math.min(lx, o.hw)), clz = Math.max(-o.hd, Math.min(lz, o.hd));
+    const ddx = lx - clx, ddz = lz - clz, d2 = ddx * ddx + ddz * ddz;
+    let nlx, nlz;
+    if (d2 > 1e-7) {
+      if (d2 >= r * r) return;
+      const d = Math.sqrt(d2), f = r / d; nlx = clx + ddx * f; nlz = clz + ddz * f;
+    } else {
+      const ex = o.hw - Math.abs(lx), ez = o.hd - Math.abs(lz);
+      if (ex < ez) { nlx = (lx < 0 ? -o.hw - r : o.hw + r); nlz = lz; } else { nlx = lx; nlz = (lz < 0 ? -o.hd - r : o.hd + r); }
+    }
+    p.x = o.x + nlx * o.c + nlz * o.s;
+    p.z = o.z - nlx * o.s + nlz * o.c;
   }
   computeFlow(px, pz) {
     const w = this.w, flow = this.flow; flow.fill(-1);
