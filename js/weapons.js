@@ -231,6 +231,7 @@ export class WeaponSystem {
 
     const targets = game.shootTargets();
     const dir = new THREE.Vector3(), normal = new THREE.Vector3();
+    let thud = false;   // one impact sound per trigger pull, even for a shotgun
     for (let p = 0; p < def.pellets; p++) {
       const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * spread;
       dir.copy(fwd).addScaledVector(right, Math.cos(a) * r).addScaledVector(up, Math.sin(a) * r).normalize();
@@ -250,7 +251,7 @@ export class WeaponSystem {
           if (pierced >= def.pierce) end = h.point;
         } else {
           // first solid surface: stop here, and paint it if the bullet came out of someone nearby
-          if (!end) { end = h.point; game.effects.burst(h.point, 3, 2.2); }
+          if (!end) { end = h.point; game.effects.burst(h.point, 3, 2.2); if (!thud) { thud = true; game.audio.impact(h.distance); } }
           if (lastFlesh >= 0 && h.distance - lastFlesh < 5 && h.face) {
             normal.copy(h.face.normal).transformDirection(h.object.matrixWorld);
             game.effects.wallDecal(h.point, normal, 0.6 + Math.random() * 0.9);

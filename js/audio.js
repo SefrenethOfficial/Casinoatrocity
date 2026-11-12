@@ -11,7 +11,7 @@ const SHOTS = {
   revolver: { rate: 0.7,  vol: 1.0,  dur: 0.42, freq: 1300, q: 0.6, gain: 0.8,  thump: 110, thumpGain: 0.95, boom: true },
 };
 const SAMPLES = { shot: 'assets/sfx/shot.mp3', click: 'assets/sfx/click.mp3', upgrade: 'assets/sfx/upgrade.mp3', door: 'assets/sfx/door.mp3',
-  swing: 'assets/sfx/swing.mp3', stab: 'assets/sfx/stab.mp3', splat: 'assets/sfx/splat.mp3', reload: 'assets/sfx/reload.mp3', gib: 'assets/sfx/gib.mp3' };
+  swing: 'assets/sfx/swing.mp3', stab: 'assets/sfx/stab.mp3', splat: 'assets/sfx/splat.mp3', reload: 'assets/sfx/reload.mp3', gib: 'assets/sfx/gib.mp3', impact: 'assets/sfx/impact.mp3' };
 const SHOT_LEAD_IN = 0.06;   // the gunshot recording starts with a short silence
 
 export class AudioSys {
@@ -121,6 +121,8 @@ export class AudioSys {
   hit() { this._tone('square', 1500, 1200, 0.035, 0.1); }
   headshot() { this._tone('square', 2200, 1600, 0.06, 0.16); this._tone('sine', 880, 440, 0.12, 0.2); }
   kill() { this._tone('triangle', 520, 780, 0.09, 0.16); }
+  // bullet striking a wall, floor or furniture; quieter the further away it lands
+  impact(dist = 0) { this._sample('impact', 0.9 + Math.random() * 0.3, Math.max(0.12, 0.6 * (1 - dist / 30)), 0.19); }
   // knife through flesh
   stab() { this._sample('stab', 0.95 + Math.random() * 0.15, 0.85, 0.1); }
   slash() { if (this._sample('swing', 0.9 + Math.random() * 0.25, 0.8, 0.07)) return; this._noise(0.1, 'highpass', 2600, 0.8, 0.22, 0, 900); }
