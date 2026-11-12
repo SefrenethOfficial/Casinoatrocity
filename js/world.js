@@ -77,44 +77,36 @@ export class World {
   roomSpawns(id) { return this.spawns.filter(s => s.room === id); }
 
   // ---- generation ----
+  // A floor is one long corridor of rooms from the elevator to the stairs, with the odd dead-end
+  // side room (sometimes locked) hanging off it. No loops, no way to get lost.
   _genLayout() {
     const rng = this.rng, GW = this.gw, GH = this.gh, N = GW * GH;
     for (let row = 0; row < GH; row++) for (let col = 0; col < GW; col++) {
-      const id = this.roomIndex(col, row) + 1;
-      const x0 = 1 + col * PITCH, z0 = 1 + row * PITCH;
-      for (let dz = 0; dz < ROOM; dz++) for (let dx = 0; dx < ROOM; dx++) {
-        const cx = x0 + dx, cz = z0 + dz;
-        this.blockedGrid[cz * this.w + cx] = 0;
-        this.roomOf[cz * this.w + cx] = id;
+      const id = this.roomIndex(col, row) + 1, x0 = 1 + col * PITCH, z0 = 1 + row * PITCH;
+      this.rooms.push({ id, col, row, x0, z0, cx: (x0 + MID + 0.5) * CELL, cz: (z0 + MID + 0.5) * CELL, feature: null, used: false, side: false });
+    }
+    const nbrs = i => { const c = i % GW, r = (i / GW) | 0, out = []; if (c + 1 < GW) out.push(i + 1); if (c > 0) out.push(i - 1); if (r + 1 < GH) out.push(i + GW); if (r > 0) out.push(i - GW); return out; };
+
+    // main path: a self-avoiding walk that hugs unvisited corners so it snakes through most of the grid
+    const walk = () => {
+      const seen = new Array(N).fill(false), path = [0]; seen[0] = true;
+      for (;;) {
+        const free = nbrs(path[path.length - 1]).filter(n => !seen[n]);
+        if (!free.length) break;
+        const onward = n => nbrs(n).filter(m => !seen[m]).length;
+        let next = free[(rng() * free.length) | 0];
+        if (rng() < 0.85) { let best = 9; for (const n of free) { const o = onward(n) + rng() * 0.5; if (o < best) { best = o; next = n; } } }
+        seen[next] = true; path.push(next);
       }
-      this.rooms.push({ id, col, row, x0, z0, cx: (x0 + MID + 0.5) * CELL, cz: (z0 + MID + 0.5) * CELL, feature: null });
-    }
-    const idx = (c, r) => r * GW + c;
-    const edgeKey = (a, b) => a < b ? a + '-' + b : b + '-' + a;
-    // randomized-DFS spanning tree over the room grid (guarantees full connectivity)
-    const seen = new Array(N).fill(false), tree = new Set(), adj = {};
-    const start = 0, stack = [start]; seen[start] = true;
-    while (stack.length) {
-      const cur = stack[stack.length - 1], cc = cur % GW, cr = (cur / GW) | 0, nbrs = [];
-      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nc = cc + dc, nr = cr + dr; if (nc < 0 || nr < 0 || nc >= GW || nr >= GH) continue; const ni = idx(nc, nr); if (!seen[ni]) nbrs.push(ni); }
-      if (!nbrs.length) { stack.pop(); continue; }
-      const ni = nbrs[(rng() * nbrs.length) | 0];
-      seen[ni] = true; tree.add(edgeKey(cur, ni)); (adj[cur] ||= []).push(ni); (adj[ni] ||= []).push(cur); stack.push(ni);
-    }
-    // extra loop edges for branching / alternate paths
-    const extra = new Set();
-    for (let r = 0; r < GH; r++) for (let c = 0; c < GW; c++) for (const [dc, dr] of [[1, 0], [0, 1]]) {
-      const cc2 = c + dc, rr = r + dr; if (cc2 >= GW || rr >= GH) continue;
-      const a = idx(c, r), b = idx(cc2, rr), k = edgeKey(a, b);
-      if (tree.has(k)) continue;
-      if (rng() < 0.45) { extra.add(k); (adj[a] ||= []).push(b); (adj[b] ||= []).push(a); }
-    }
-    // stairs room: graph-farthest from the start
-    const dist = new Array(N).fill(-1), parent = new Array(N).fill(-1); dist[start] = 0; const q = [start];
-    for (let hh = 0; hh < q.length; hh++) { const u = q[hh]; for (const v of (adj[u] || [])) if (dist[v] < 0) { dist[v] = dist[u] + 1; parent[v] = u; q.push(v); } }
-    let far = start; for (let i = 0; i < N; i++) if (dist[i] > dist[far]) far = i;
-    this.startRoom = start + 1; this.stairsRoom = far + 1;
-    const pathEdges = new Set(); let pc = far; while (parent[pc] >= 0) { pathEdges.add(edgeKey(pc, parent[pc])); pc = parent[pc]; }
+      return path;
+    };
+    let path = walk();
+    for (let tries = 0; tries < 12 && path.length < N * 0.7; tries++) { const p2 = walk(); if (p2.length > path.length) path = p2; }
+    path = path.slice(0, Math.min(6 + this.floor * 2, 16));   // floors get longer as you go down
+    const onPath = new Set(path);
+    this.startRoom = 1; this.stairsRoom = path[path.length - 1] + 1;
+    this.path = path.map(i => i + 1);
+    for (const i of path) this.rooms[i].used = true;
 
     let number = 0;
     const addDoor = (a, b, locked) => {
@@ -122,32 +114,41 @@ export class World {
       let cx, cz, vertical;
       if (ar === br) { vertical = true; cx = (Math.min(ac, bc) + 1) * PITCH; cz = 1 + ar * PITCH + MID; }
       else { vertical = false; cz = (Math.min(ar, br) + 1) * PITCH; cx = 1 + ac * PITCH + MID; }
-      this.blockedGrid[cz * this.w + cx] = 1;   // starts closed (a wall)
-      this.roomOf[cz * this.w + cx] = Math.min(a, b) + 1;
       this.doors.push({ id: this.doors.length, number: ++number, a: a + 1, b: b + 1, cx, cz, vertical, locked, open: false });
     };
-    for (const k of new Set([...tree, ...extra])) {
-      const [a, b] = k.split('-').map(Number);
-      addDoor(a, b, !pathEdges.has(k) && extra.has(k) && rng() < 0.6);   // only optional branches can lock
+    for (let i = 1; i < path.length; i++) addDoor(path[i - 1], path[i], false);
+
+    // side rooms: leftover rooms that touch the path become dead ends off it
+    const sides = [];
+    for (let i = 0; i < N; i++) {
+      if (onPath.has(i)) continue;
+      const hosts = nbrs(i).filter(n => onPath.has(n) && n !== path[path.length - 1]);
+      if (!hosts.length || sides.length >= 3 || rng() < 0.45) continue;
+      const host = hosts[(rng() * hosts.length) | 0];
+      this.rooms[i].used = true; this.rooms[i].side = true; sides.push(this.rooms[i]);
+      addDoor(host, i, rng() < 0.45);
     }
 
-    const sr = this.rooms[start];
+    // carve the rooms that exist, then close the doorways
+    for (const r of this.rooms) {
+      if (!r.used) continue;
+      for (let dz = 0; dz < ROOM; dz++) for (let dx = 0; dx < ROOM; dx++) { const k = (r.z0 + dz) * this.w + r.x0 + dx; this.blockedGrid[k] = 0; this.roomOf[k] = r.id; }
+      for (const [dx, dz] of [[1, 1], [ROOM - 2, 1], [1, ROOM - 2], [ROOM - 2, ROOM - 2]]) this.spawns.push({ x: (r.x0 + dx + 0.5) * CELL, z: (r.z0 + dz + 0.5) * CELL, room: r.id });
+    }
+    for (const d of this.doors) { this.blockedGrid[d.cz * this.w + d.cx] = 1; this.roomOf[d.cz * this.w + d.cx] = Math.min(d.a, d.b); }
+
+    const sr = this.rooms[0];
     this.playerSpawn.set((sr.x0 + MID + 0.5) * CELL, 0, (sr.z0 + MID + 0.5) * CELL);
 
-    for (const r of this.rooms) for (const [dx, dz] of [[1, 1], [ROOM - 2, 1], [1, ROOM - 2], [ROOM - 2, ROOM - 2]])
-      this.spawns.push({ x: (r.x0 + dx + 0.5) * CELL, z: (r.z0 + dz + 0.5) * CELL, room: r.id });
-
-    // hand out features to non-start, non-stairs rooms
-    const others = this.rooms.filter(r => r.id !== this.startRoom && r.id !== this.stairsRoom);
-    for (let i = others.length - 1; i > 0; i--) { const j = (rng() * (i + 1)) | 0; [others[i], others[j]] = [others[j], others[i]]; }
-    const pool = [{ type: 'wallbuy', weapon: 'smg' }];
-    pool.push({ type: 'wallbuy', weapon: 'shotgun' });
-    if (this.floor >= 2) pool.push({ type: 'wallbuy', weapon: 'ar' });
-    pool.push({ type: 'box' });
-    pool.push({ type: 'perk', perk: PERKS.thick });
-    pool.push({ type: 'perk', perk: PERKS.hands });
-    for (let k = 0; k < Math.ceil(this.rooms.length / 2); k++) pool.push({ type: 'ammo' });
-    others.forEach((r, i) => { if (i < pool.length) r.feature = pool[i]; });
+    // the good stuff sits in the side rooms; ammo and a cheap gun are always on the main path
+    const mid = path.slice(1, -1).map(i => this.rooms[i]);
+    const prizes = [{ type: 'box' }, { type: 'perk', perk: PERKS.thick }, { type: 'perk', perk: PERKS.hands }, { type: 'wallbuy', weapon: 'ar' }];
+    for (let i = prizes.length - 1; i > 0; i--) { const j = (rng() * (i + 1)) | 0; [prizes[i], prizes[j]] = [prizes[j], prizes[i]]; }
+    for (const r of sides) r.feature = prizes.shift() || { type: 'ammo' };
+    if (mid.length) mid[0].feature = { type: 'wallbuy', weapon: 'smg' };
+    if (mid.length > 2) mid[Math.min(mid.length - 1, 3)].feature = { type: 'wallbuy', weapon: 'shotgun' };
+    for (let i = 2; i < mid.length; i += 3) if (!mid[i].feature) mid[i].feature = { type: 'ammo' };
+    for (const r of mid) if (!r.feature && prizes.length && rng() < 0.5) r.feature = prizes.shift();
   }
 
   // ---- geometry ----
@@ -180,7 +181,7 @@ export class World {
     scene.add(new THREE.AmbientLight(0x5a5048, 0.85));
     scene.add(new THREE.HemisphereLight(0x6a6258, 0x1a120c, 0.5));
 
-    for (const r of this.rooms) this._dressRoom(r);
+    for (const r of this.rooms) { if (r.used) this._dressRoom(r); else this.lamps.push(null); }
     for (const d of this.doors) this._buildDoor(d);
     this.solids.push(...S.build(scene));
     D.build(scene);
@@ -211,7 +212,8 @@ export class World {
     if (start) { used.add(key(...cellOf(0, 2))); used.add(key(...cellOf(0, 4))); this._buildArrival(r); }
 
     // rain-streaked windows on outside walls
-    const outside = [r.row === 0, r.row === this.gh - 1, r.col === 0, r.col === this.gw - 1];
+    const gone = (dc, dr) => { const c = r.col + dc, rr = r.row + dr; return c < 0 || rr < 0 || c >= this.gw || rr >= this.gh || !this.rooms[rr * this.gw + c].used; };
+    const outside = [gone(0, -1), gone(0, 1), gone(-1, 0), gone(1, 0)];
     for (let wall = 0; wall < 4; wall++) {
       if (!outside[wall]) continue;
       for (const i of [1, 5]) {

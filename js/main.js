@@ -527,11 +527,12 @@ class Game {
     if (!room || this.visited.has(room)) return;
     this.visited.add(room);
     this.depth++;
-    const count = Math.min(4 + this.depth + this.floor * 2, 16);
+    const count = Math.min(3 + Math.floor(this.difficulty() * 0.6), 14);
     this.zombies.spawnRoom(this.world.roomSpawns(room), count, this.difficulty());
     this.dropsThisRoom = 0;
   }
-  difficulty() { return this.floor * 3 + this.depth; }
+  // One steady ramp for the whole run: every room you enter is a little harder than the last.
+  difficulty() { return Math.max(this.depth, (this.floor - 1) * 6 + 1); }
 
   // ---------------------------------------------------------------- loop
   frame() {

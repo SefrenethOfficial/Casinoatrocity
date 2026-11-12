@@ -359,8 +359,8 @@ export class ZombieDirector {
   get alive() { return this.zombies.reduce((n, z) => n + (z.dead ? 0 : 1), 0); }
   get remaining() { return this.queue.length + this.alive; }
 
-  healthFor(d) { return Math.round(90 + 26 * d); }
-  speedFor(d) { return Math.min(1.1 + 0.11 * d, 3.2); }
+  healthFor(d) { return Math.round(80 + 18 * d); }
+  speedFor(d) { return Math.min(1.0 + 0.06 * d, 3.0); }
 
   // Queue a batch of monsters to rise from the given spawn points (one room's worth).
   spawnRoom(points, count, difficulty) {
@@ -372,10 +372,16 @@ export class ZombieDirector {
     this.spawnT = Math.min(this.spawnT, 0.4);
   }
 
+  // d = rooms entered this run. Bellhops only at first; each nastier type joins later and its
+  // share of the pack grows steadily from there.
   pickType(d) {
-    if (d >= 6 && Math.random() < Math.min(0.08 + 0.015 * d, 0.24)) return 'butcher';
-    if (d >= 3 && Math.random() < Math.min(0.1 + 0.025 * d, 0.32)) return 'lodger';
-    if (d >= 2 && Math.random() < Math.min(0.1 + 0.03 * d, 0.34)) return 'maid';
+    const r = Math.random();
+    const butcher = d >= 12 ? Math.min(0.03 * (d - 11), 0.2) : 0;
+    const lodger = d >= 7 ? Math.min(0.04 * (d - 6), 0.28) : 0;
+    const maid = d >= 3 ? Math.min(0.05 * (d - 2), 0.3) : 0;
+    if (r < butcher) return 'butcher';
+    if (r < butcher + lodger) return 'lodger';
+    if (r < butcher + lodger + maid) return 'maid';
     return 'bellhop';
   }
 
