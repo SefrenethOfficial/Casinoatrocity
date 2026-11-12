@@ -281,7 +281,7 @@ export function mats() {
     wood: mapped(woodTex()), dark: mapped(woodTex('#2e1f14', '#22160d')), boards: mapped(boardsTex()), door: mapped(doorTex()),
     brass: flat(0xb9992f), iron: flat(0x26262c), fabric: flat(0x5c1a26), fabric2: flat(0x7a2a34), green: flat(0x23402e),
     cream: flat(0xd8d0b8), leaf: flat(0x2c4a28), terracotta: flat(0x7a4630), sheet: flat(0xb8b0a0), olive: flat(0x4a4a30),
-    glass: flat(0x7f9098), books: mapped(booksTex()), black: glow(0x050403), gold: flat(0xa8842a),
+    glass: flat(0x7f9098), gore: flat(0x5a0a0c), books: mapped(booksTex()), black: glow(0x050403), gold: flat(0xa8842a),
     paint: [0, 1, 2].map(k => mapped(paintingTex(k))),
   };
   return _mats;
@@ -351,6 +351,23 @@ export const furn = {
   },
   crates(B, M) {
     B.box(M.wood, 0.9, 0.9, 0.9, -0.2, 0.45, -0.5, 0.1); B.box(M.wood, 0.7, 0.7, 0.7, 0.45, 0.35, -0.1, -0.3); B.box(M.dark, 0.6, 0.6, 0.6, -0.15, 1.2, -0.5, 0.5);
+  },
+  // Free-standing obstacles, centred on their cell.
+  trolley(B, M) {   // brass bellhop luggage cart
+    B.box(M.dark, 1.5, 0.1, 0.8, 0, 0.3, 0); B.box(M.fabric, 1.4, 0.03, 0.7, 0, 0.365, 0);
+    for (const x of [-0.6, 0.6]) for (const z of [-0.3, 0.3]) B.cyl(M.black, 0.1, 0.1, 0.08, x, 0.1, z, 6, 0, Math.PI / 2);
+    for (const x of [-0.7, 0.7]) { for (const z of [-0.36, 0.36]) B.cyl(M.brass, 0.03, 0.03, 1.5, x, 1.1, z, 5); B.box(M.brass, 0.06, 0.06, 0.78, x, 1.86, 0); }
+    B.box(M.brass, 1.46, 0.06, 0.06, 0, 1.86, 0);
+    B.box(M.terracotta, 0.9, 0.34, 0.56, -0.15, 0.55, 0, 0.1); B.box(M.olive, 0.7, 0.28, 0.5, -0.1, 0.86, 0, -0.15); B.box(M.wood, 0.36, 0.5, 0.5, 0.45, 0.63, 0.02);
+    B.box(M.brass, 0.1, 0.07, 0.02, -0.15, 0.55, 0.29); B.box(M.brass, 0.1, 0.07, 0.02, -0.1, 0.86, 0.26);
+  },
+  linen(B, M) {     // housekeeping cart
+    B.box(M.sheet, 1.3, 0.06, 0.7, 0, 0.22, 0); B.box(M.sheet, 1.3, 0.06, 0.7, 0, 0.62, 0); B.box(M.sheet, 1.3, 0.06, 0.7, 0, 1.02, 0);
+    for (const x of [-0.62, 0.62]) for (const z of [-0.32, 0.32]) { B.box(M.iron, 0.05, 1.0, 0.05, x, 0.55, z); B.cyl(M.black, 0.08, 0.08, 0.06, x, 0.08, z, 6, 0, Math.PI / 2); }
+    B.box(M.cream, 0.5, 0.2, 0.5, -0.3, 1.15, 0); B.box(M.cream, 0.44, 0.14, 0.44, -0.3, 1.32, 0, 0.2); B.box(M.cream, 0.5, 0.26, 0.5, 0.25, 0.78, 0);
+    B.box(M.olive, 0.5, 0.9, 0.62, 0.92, 0.6, 0); B.box(M.iron, 0.04, 0.04, 0.7, 0.66, 1.1, 0);
+    B.cyl(flat(0x3a5a7a), 0.16, 0.13, 0.3, 0.3, 1.2, 0.1, 7); B.box(M.wood, 0.04, 1.3, 0.04, 0.3, 1.5, 0.1, 0, 0.12);
+    B.box(M.gore, 0.3, 0.02, 0.3, -0.2, 0.26, 0.1);
   },
   painting(B, M, kind = 0, w = 0.95, h = 0.72, y = 2.0, x = 0) {
     B.box(M.gold, w + 0.14, h + 0.14, 0.04, x, y, -0.975); B.quad(M.paint[kind % 3], w, h, x, y, -0.92);

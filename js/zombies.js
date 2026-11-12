@@ -457,6 +457,9 @@ export class ZombieDirector {
         continue;
       }
 
+      // nobody to chase while the player is shut in a wardrobe
+      if (game.hidden && z.state !== 'attack') { if (step) pose(z); continue; }
+
       z.groanT -= dt;
       if (z.groanT <= 0) {
         z.groanT = 4 + Math.random() * 7;

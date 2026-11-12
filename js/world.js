@@ -129,11 +129,19 @@ export class World {
       addDoor(host, i, rng() < 0.45);
     }
 
+    // some plain stretches of the path are thin service corridors instead of full rooms
+    const dirOf = (from, to) => { const d = to - from; return d === 1 ? 'E' : d === -1 ? 'W' : d > 0 ? 'S' : 'N'; };
+    for (const r of this.rooms) r.dirs = [];
+    for (const d of this.doors) { this.rooms[d.a - 1].dirs.push(dirOf(d.a - 1, d.b - 1)); this.rooms[d.b - 1].dirs.push(dirOf(d.b - 1, d.a - 1)); }
+    for (let i = 2; i < path.length - 1; i++) if (rng() < 0.4 && !this.rooms[path[i - 1]].hall) this.rooms[path[i]].hall = true;
+    const lane = (r, dx, dz) => r.dirs.some(k => k === 'N' ? (dx >= 2 && dx <= 4 && dz <= 4) : k === 'S' ? (dx >= 2 && dx <= 4 && dz >= 2) : k === 'W' ? (dz >= 2 && dz <= 4 && dx <= 4) : (dz >= 2 && dz <= 4 && dx >= 2));
+
     // carve the rooms that exist, then close the doorways
     for (const r of this.rooms) {
       if (!r.used) continue;
-      for (let dz = 0; dz < ROOM; dz++) for (let dx = 0; dx < ROOM; dx++) { const k = (r.z0 + dz) * this.w + r.x0 + dx; this.blockedGrid[k] = 0; this.roomOf[k] = r.id; }
-      for (const [dx, dz] of [[1, 1], [ROOM - 2, 1], [1, ROOM - 2], [ROOM - 2, ROOM - 2]]) this.spawns.push({ x: (r.x0 + dx + 0.5) * CELL, z: (r.z0 + dz + 0.5) * CELL, room: r.id });
+      for (let dz = 0; dz < ROOM; dz++) for (let dx = 0; dx < ROOM; dx++) { const k = (r.z0 + dz) * this.w + r.x0 + dx; this.roomOf[k] = r.id; if (!r.hall || lane(r, dx, dz)) this.blockedGrid[k] = 0; }
+      const pts = r.hall ? r.dirs.map(k => k === 'N' ? [3, 1] : k === 'S' ? [3, 5] : k === 'W' ? [1, 3] : [5, 3]) : [[1, 1], [ROOM - 2, 1], [1, ROOM - 2], [ROOM - 2, ROOM - 2]];
+      for (const [dx, dz] of pts) this.spawns.push({ x: (r.x0 + dx + 0.5) * CELL, z: (r.z0 + dz + 0.5) * CELL, room: r.id });
     }
     for (const d of this.doors) { this.blockedGrid[d.cz * this.w + d.cx] = 1; this.roomOf[d.cz * this.w + d.cx] = Math.min(d.a, d.b); }
 
@@ -141,7 +149,7 @@ export class World {
     this.playerSpawn.set((sr.x0 + MID + 0.5) * CELL, 0, (sr.z0 + MID + 0.5) * CELL);
 
     // the good stuff sits in the side rooms; ammo and a cheap gun are always on the main path
-    const mid = path.slice(1, -1).map(i => this.rooms[i]);
+    const mid = path.slice(1, -1).map(i => this.rooms[i]).filter(r => !r.hall);
     const prizes = [{ type: 'box' }, { type: 'perk', perk: PERKS.thick }, { type: 'perk', perk: PERKS.hands }, { type: 'wallbuy', weapon: 'ar' }];
     for (let i = prizes.length - 1; i > 0; i--) { const j = (rng() * (i + 1)) | 0; [prizes[i], prizes[j]] = [prizes[j], prizes[i]]; }
     for (const r of sides) r.feature = prizes.shift() || { type: 'ammo' };
@@ -192,15 +200,18 @@ export class World {
     const stairs = r.id === this.stairsRoom, start = r.id === this.startRoom;
 
     // rug + hanging lamp
-    if (!stairs) D.plane(this.rugs[r.id % this.rugs.length], 4.8, 4.8, cx, 0.02, cz);
+    if (!stairs) D.plane(this.rugs[r.id % this.rugs.length], r.hall ? 3.4 : 4.8, r.hall ? 3.4 : 4.8, cx, 0.02, cz);
     const dead = !stairs && !start && rng() < 0.18, flick = !dead && !start && rng() < 0.3;
     const col = stairs ? 0xd0ffdc : 0xffb86a, base = dead ? 0 : 30;
     D.cyl(M.iron, 0.02, 0.02, 0.7, cx, WALL_H - 0.35, cz, 4); D.cyl(M.brass, 0.14, 0.14, 0.05, cx, WALL_H - 0.02, cz, 6);
     D.add(new THREE.MeshLambertMaterial({ color: 0x8a6a3a, side: THREE.DoubleSide, emissive: dead ? 0 : 0x4a3210 }), new THREE.ConeGeometry(0.42, 0.34, 8, 1, true), cx, WALL_H - 0.8, cz);
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 4), glow(dead ? 0x2a2620 : 0xffe2a0)); bulb.position.set(cx, WALL_H - 0.92, cz); scene.add(bulb);
     const lamp = new THREE.PointLight(col, base, 17, 1.4); lamp.position.set(cx, WALL_H - 1.0, cz); scene.add(lamp);
+    lamp.userData.base = base; lamp.userData.bulb = bulb;
     this.lamps.push(lamp);
     if (flick) { const seed = r.id * 3.3; this.animated.push(t => { const on = Math.sin(t * 31 + seed) > -0.6 && Math.sin(t * 7 + seed) > -0.85; lamp.intensity = on ? base : base * 0.12; bulb.visible = on; }); }
+
+    if (r.hall) { this._dressHall(r); return; }
 
     // wall slots: every perimeter cell except the four door positions
     const used = new Set(), key = (a, b) => b * w + a;
@@ -230,11 +241,12 @@ export class World {
     const slots = []; for (let wall = 0; wall < 4; wall++) for (const i of [0, 1, 2, 4, 5, 6]) slots.push([wall, i]);
     for (let i = slots.length - 1; i > 0; i--) { const j = (rng() * (i + 1)) | 0; [slots[i], slots[j]] = [slots[j], slots[i]]; }
     const kinds = ['wardrobe', 'dresser', 'bookshelf', 'bed', 'sofa', 'desk', 'armchair', 'luggage', 'clock', 'plant', 'crates', 'bed', 'armchair'];
-    let want = 4 + ((rng() * 4) | 0), beds = 0;
+    let want = 4 + ((rng() * 4) | 0), beds = 0, closets = 0;
     for (const [wall, i] of slots) {
       if (want <= 0) break;
       const [a, b] = cellOf(wall, i); if (used.has(key(a, b))) continue;
       let kind = kinds[(rng() * kinds.length) | 0];
+      if (!closets) kind = 'wardrobe';
       if (kind === 'bed' && beds) kind = 'dresser';
       if (kind === 'bed' || kind === 'sofa') {
         const j = i + NEXT[wall]; if (j < 0 || j > 6 || j === 3) continue;
@@ -242,7 +254,15 @@ export class World {
         block(a2, b2); if (kind === 'bed') beds++;
       }
       block(a, b); want--;
+      if (kind === 'wardrobe') { closets++; const [x, z] = this.center(a, b); this.interactables.push({ type: 'closet', x, z, ry: ROT[wall] }); }
       at(wall, i, B => (kind === 'armchair' || kind === 'sofa') ? furn[kind](B, M, this.fab) : furn[kind](B, M), S);
+    }
+    // the odd cart left standing out in the room
+    for (const [dx, dz] of [[2, 2], [4, 4], [4, 2], [2, 4]]) {
+      if (rng() > 0.22) continue;
+      const a = r.x0 + dx, b = r.z0 + dz, [x, z] = this.center(a, b);
+      this.blockedGrid[b * w + a] = 1;
+      S.push(x, 0, z, rng() < 0.5 ? 0 : Math.PI / 2); (rng() < 0.5 ? furn.trolley : furn.linen)(S, M); S.pop();
     }
     // pictures on a couple of the bare stretches of wall
     let pics = 1 + ((rng() * 3) | 0);
@@ -252,6 +272,31 @@ export class World {
 
     if (stairs) this._buildStairs(cx, cz);
     else if (r.feature) this._buildFeature(r);
+  }
+
+  // A thin corridor: carts parked along the sides to weave around, and one wardrobe to hide in.
+  _dressHall(r) {
+    const S = this.S, D = this.D, M = this.M, rng = this.rng, w = this.w;
+    let closet = false;
+    for (const k of r.dirs) {
+      const ns = k === 'N' || k === 'S', outer = (k === 'N' || k === 'W') ? [0, 1] : [6, 5];
+      const sideA = rng() < 0.5 ? 2 : 4, sideB = 6 - sideA, p = rng() < 0.5 ? 0 : 1;
+      const put = (side, along, fn) => {
+        const dx = ns ? side : along, dz = ns ? along : side, a = r.x0 + dx, b = r.z0 + dz, [x, z] = this.center(a, b);
+        this.blockedGrid[b * w + a] = 1; fn(x, z, side);
+      };
+      put(sideA, outer[p], (x, z) => { S.push(x, 0, z, ns ? Math.PI / 2 : 0); (rng() < 0.5 ? furn.trolley : furn.linen)(S, M); S.pop(); });
+      if (!closet) {
+        closet = true;
+        put(sideB, outer[1 - p], (x, z, side) => {
+          const ry = ns ? (side === 2 ? Math.PI / 2 : -Math.PI / 2) : (side === 2 ? 0 : Math.PI);
+          S.push(x, 0, z, ry); furn.wardrobe(S, M); S.pop();
+          this.interactables.push({ type: 'closet', x, z, ry });
+        });
+      } else if (rng() < 0.5) put(sideB, outer[1 - p], (x, z, side) => { const ry = ns ? (side === 2 ? Math.PI / 2 : -Math.PI / 2) : (side === 2 ? 0 : Math.PI); S.push(x, 0, z, ry); furn.crates(S, M); S.pop(); });
+      // sconces down the corridor walls
+      for (const side of [2, 4]) { const dx = ns ? side : outer[0], dz = ns ? outer[0] : side, [x, z] = this.center(r.x0 + dx, r.z0 + dz); const ry = ns ? (side === 2 ? Math.PI / 2 : -Math.PI / 2) : (side === 2 ? 0 : Math.PI); if (!this.blockedGrid[(r.z0 + dz) * w + r.x0 + dx]) { D.push(x, 0, z, ry); furn.sconce(D, M, 2.3); D.pop(); } }
+    }
   }
 
   _buildArrival(r) {
@@ -382,6 +427,10 @@ export class World {
   update(time) {
     this.time = time;
     for (const fn of this.animated) fn(time);
+    if (this.flicker) {   // every light in the building stutters
+      for (let i = 0; i < this.lamps.length; i++) { const l = this.lamps[i]; if (!l) continue; const on = Math.sin(time * 37 + i * 1.7) * Math.sin(time * 11 + i) > 0.1; l.intensity = on ? l.userData.base : l.userData.base * 0.04; l.userData.bulb.visible = on; }
+      this._wasFlicker = true;
+    } else if (this._wasFlicker) { this._wasFlicker = false; for (const l of this.lamps) if (l) { l.intensity = l.userData.base; l.userData.bulb.visible = true; } }
     const dt = Math.min(Math.max(time - (this._lastT ?? time), 0), 0.2); this._lastT = time;
     for (const d of this.doors) {
       if (!d.open || d.hinge.rotation.y === d.swing) continue;

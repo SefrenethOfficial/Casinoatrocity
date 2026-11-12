@@ -10,6 +10,7 @@ A PSX-styled browser FPS built with [three.js](https://threejs.org/). Check in t
 - **The elevator** — a ride-down intermission (with its own music) where you can buy a **Flashlight** and **Lockpicks** with chips before the doors open.
 - **A randomly generated hotel** — every floor is a fresh maze of dark wooden rooms joined by **numbered doors**, some **locked** (pick them with a lockpick). Each room spawns its own monsters when you step in. Rooms are dark — bring a light. Find the **stairs down** to descend to a bigger, tougher floor.
 - **Enemies** — bellhops shamble, maids sprint, lodgers scuttle in on all fours and the butcher soaks damage and hits hard. Gore, dismemberment and blood included.
+- **The face** — every few rooms the lights may stutter and a song kicks in: a few seconds later something flies down the corridor and kills everything in its path. Hide in a wardrobe (F) until it passes.
 - **A proper death screen** — when you die it tells you exactly what got you, where, and how to avoid it next time.
 - **PSX look** — rendered at 240p (360p/480p in Settings) with vertex wobble, chunky textures, dithering and choppy animation.
 - **Weapons & cosmetics** — pistol, SMG, shotgun, AR, sniper, LMG, revolver and a knife, plus weapon cases and knife crates with dozens of skins. Chips, skins, settings and your deepest floor are saved in your browser.

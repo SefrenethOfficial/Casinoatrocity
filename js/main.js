@@ -129,6 +129,7 @@ class Game {
     this.effects = new Effects(scene, this.world);
     this.zombies.reset();
     this.visited = new Set([this.world.startRoom]);
+    this._clearFace();
     // headlamp / flashlight
     this.flashlight = new THREE.SpotLight(0xfff1d0, 0, 22, 0.6, 0.5, 1.4);
     this.flashlight.visible = true;
@@ -137,6 +138,82 @@ class Game {
     this.player.reset(this.world.playerSpawn);
     this.player.yaw = Math.PI;   // face into the room
   }
+
+  // ---------------------------------------------------------------- the face
+  _clearFace() {
+    if (this.face && this.face.sprite) this.face.sprite.parent && this.face.sprite.parent.remove(this.face.sprite);
+    if (this.face && this.music.cur === 'face') this.music.stop();
+    this.face = null; this.sinceFace = 0; this.hidden = null;
+    $('hide').classList.add('hidden');
+  }
+
+  // Lights stutter, the song kicks in, and a few seconds later it comes down the corridor.
+  _startFace() {
+    this.sinceFace = 0;
+    this.face = { phase: 'warn', t: 0, sprite: null, route: null, seg: 0, pos: new THREE.Vector3() };
+    this.world.flicker = true;
+    this.music.play('face', { loop: false });
+    this.hud.announce('THE LIGHTS', 'Hide in a wardrobe — F', 3.5);
+  }
+
+  _faceRoute() {
+    const w = this.world, path = w.path, here = w.roomAt(this.player.pos.x, this.player.pos.z) || path[0];
+    let i = path.indexOf(here), side = null;
+    if (i < 0) { const d = w.doors.find(d => d.a === here || d.b === here); side = here; i = Math.max(0, path.indexOf(d ? (d.a === here ? d.b : d.a) : path[0])); }
+    const ids = [];
+    for (let k = Math.max(0, i - 4); k <= Math.min(path.length - 1, i + 2); k++) { ids.push(path[k]); if (side && k === i) ids.push(side, path[k]); }
+    if (ids.length < 2) ids.push(ids[0]);
+    return ids.map(id => { const [x, z] = w.roomCenter(id); return new THREE.Vector3(x, 1.7, z); });
+  }
+
+  _updateFace(dt) {
+    const f = this.face; if (!f) return;
+    f.t += dt;
+    if (f.phase === 'warn') {
+      if (f.t < 6) return;
+      if (!this.faceTex) { this.faceTex = new THREE.TextureLoader().load('assets/img/face.webp'); this.faceTex.colorSpace = THREE.SRGBColorSpace; }
+      f.route = this._faceRoute(); f.seg = 0; f.pos.copy(f.route[0]);
+      f.sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.faceTex, fog: false, transparent: true }));
+      f.sprite.scale.set(3.4, 3.4, 1);
+      f.light = new THREE.PointLight(0xffe060, 60, 22, 1.4); f.sprite.add(f.light);
+      this.scene.add(f.sprite);
+      this.audio.roar();
+      f.phase = 'fly'; f.t = 0;
+      return;
+    }
+    if (f.phase === 'fly') {
+      let move = 24 * dt;
+      while (move > 0 && f.seg < f.route.length - 1) {
+        const to = f.route[f.seg + 1], d = f.pos.distanceTo(to);
+        if (d <= move) { f.pos.copy(to); f.seg++; move -= d; } else { f.pos.addScaledVector(V.copy(to).sub(f.pos).normalize(), move); move = 0; }
+      }
+      f.sprite.position.set(f.pos.x, 1.7 + Math.sin(f.t * 30) * 0.15, f.pos.z);
+      f.sprite.material.rotation = Math.sin(f.t * 18) * 0.35;
+      const s = 3.4 + Math.sin(f.t * 40) * 0.4; f.sprite.scale.set(s, s, 1);
+      // everything it passes dies
+      for (const z of this.zombies.zombies) {
+        if (z.dead || Math.hypot(z.x - f.pos.x, z.z - f.pos.z) > 9) continue;
+        if (this.zombies.damage(z, 1e9)) this._goreKill(z, 'gib', V.set(z.x - f.pos.x, 0, z.z - f.pos.z).normalize());
+      }
+      const p = this.player.pos;
+      if (!this.hidden && !this.admin.god && this.state === 'playing' && Math.hypot(p.x - f.pos.x, p.z - f.pos.z) < 10) {
+        this.lastHit = { type: 'face' };
+        this.player.health = 0; this.hud.blood(4);
+        this.gameOver();
+      }
+      if (f.seg >= f.route.length - 1) { this.scene.remove(f.sprite); f.sprite = null; f.phase = 'out'; f.t = 0; }
+      return;
+    }
+    if (f.t > 1.2) { this.world.flicker = false; if (this.music.cur === 'face') this.music.stop(); this.face = null; this.hud.announce('IT PASSED', '', 2); }
+  }
+
+  _hide(it) {
+    this.hidden = it;
+    this.audio.door();
+    this._clearInput();
+    $('hide').classList.remove('hidden');
+  }
+  _unhide() { this.hidden = null; this.audio.door(); $('hide').classList.add('hidden'); }
 
   resetRun() {
     this.points = 500;
@@ -233,6 +310,7 @@ class Game {
   }
 
   quitToLobby() {
+    this._clearFace();
     this._commitRun();
     this.floor = 0;
     this.hasLight = false; this.lockpicks = 0;
@@ -269,6 +347,7 @@ class Game {
     this.deathT += dt;
     this.zombies.update(dt);
     this.effects.update(dt);
+    this._updateFace(dt);
     const cam = this.camera, k = Math.min(1, dt * 5);
     cam.position.y += (0.3 - cam.position.y) * k;
     cam.rotation.z += (1.2 - cam.rotation.z) * k;
@@ -282,6 +361,7 @@ class Game {
       bellhop: { title: 'TORN APART', what: 'A bellhop dragged you down and tore you apart', tip: 'Bellhops are slow but they swarm. Keep backpedalling, never stand still in a doorway, and thin the pack before it reaches you.' },
       maid: { title: 'RUN DOWN', what: 'A maid sprinted you down and clawed you open', tip: 'Maids are fragile but very fast. When you hear the shriek, stop and face it: two or three body shots drop one before it reaches you.' },
       lodger: { title: 'DRAGGED UNDER', what: 'A lodger scuttled in low and opened your throat', tip: 'Lodgers stay below your crosshair. Aim at the floor in front of you and fire early, or draw the knife and outrun it.' },
+      face: { title: 'AWESOME', what: 'The face came screaming down the corridor and you were standing in the open', tip: 'When the lights stutter and the music starts you have about six seconds. Get into a wardrobe (F) and stay there until it has gone past.' },
       butcher: { title: 'BUTCHERED', what: 'The butcher split your skull with his cleaver', tip: 'The butcher soaks up damage and one chop nearly kills you. Never trade blows up close: back away through the room and empty a magazine into the sack on his head.' },
     };
     const info = (this.lastHit && INFO[this.lastHit.type]) || { title: 'YOU DIED', what: 'You bled out', tip: 'Watch your health bar. Back off and let it regenerate before you push the next room.' };
@@ -373,7 +453,7 @@ class Game {
   damagePlayer(amount, source) {
     const p = this.player;
     if (this.state !== 'playing') return;
-    if (this.admin.god) return;
+    if (this.admin.god || this.hidden) return;
     if (source && source.type) this.lastHit = { type: source.type };
     p.health -= amount;
     p.sinceHit = 0; p.shake = 0.05;
@@ -465,7 +545,11 @@ class Game {
     const key = '<kbd>F</kbd> ';
     let html = '', use = null;
     const door = this._nearestDoor();
-    if (it && it.type === 'stairs') {
+    if (this.hidden) {
+      html = `${key}Step out of the wardrobe`; use = () => this._unhide();
+    } else if (it && it.type === 'closet') {
+      html = `${key}Hide in the wardrobe`; use = () => this._hide(it);
+    } else if (it && it.type === 'stairs') {
       html = `${key}Descend the stairs <b>(Floor ${this.floor + 1})</b>`;
       use = () => this.nextFloor();
     } else if (it && it.type === 'wallbuy') {
@@ -530,6 +614,9 @@ class Game {
     const count = Math.min(3 + Math.floor(this.difficulty() * 0.6), 14);
     this.zombies.spawnRoom(this.world.roomSpawns(room), count, this.difficulty());
     this.dropsThisRoom = 0;
+    // every few rooms there is a chance the face comes through
+    this.sinceFace++;
+    if (!this.face && this.sinceFace >= 3 && room !== this.world.stairsRoom && Math.random() < 0.35) this._startFace();
   }
   // One steady ramp for the whole run: every room you enter is a little harder than the last.
   difficulty() { return Math.max(this.depth, (this.floor - 1) * 6 + 1); }
@@ -566,9 +653,17 @@ class Game {
   update(dt) {
     this.doubleT = Math.max(0, this.doubleT - dt);
     this.instaT = Math.max(0, this.instaT - dt);
-    this.player.update(dt, this.input, this.weapons.ads);
-    this.weapons.update(dt, this.input);
+    if (this.hidden) {
+      // shut in the wardrobe, peering out through the slats
+      const h = this.hidden;
+      this.camera.position.set(h.x, 1.5, h.z);
+      this.camera.rotation.set(0, h.ry + Math.PI + Math.sin(this.time * 0.7) * 0.08, 0);
+    } else {
+      this.player.update(dt, this.input, this.weapons.ads);
+      this.weapons.update(dt, this.input);
+    }
     this.zombies.update(dt);
+    this._updateFace(dt);
     this.effects.update(dt);
     this._updateDrops(dt);
     this._updateBox(dt);
@@ -607,7 +702,7 @@ class Game {
     const r = this.renderer;
     this.psx.begin();
     r.render(this.scene, this.camera);
-    if (this.state === 'playing' || this.state === 'lobby') { r.clearDepth(); r.render(this.weapons.vmScene, this.weapons.vmCamera); }
+    if ((this.state === 'playing' && !this.hidden) || this.state === 'lobby') { r.clearDepth(); r.render(this.weapons.vmScene, this.weapons.vmCamera); }
     this.psx.end();
   }
 
