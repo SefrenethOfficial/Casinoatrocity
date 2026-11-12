@@ -118,9 +118,10 @@ export class AudioSys {
   reloadStart() { if (this._sample('reload', 0.95 + Math.random() * 0.1, 0.8, 0.04)) { this._reloadSampled = true; return; } this._reloadSampled = false; this._noise(0.06, 'bandpass', 2600, 4, 0.25); this._tone('square', 300, 200, 0.05, 0.1, 0.05); }
   reloadEnd() { if (this._reloadSampled) return; this._noise(0.05, 'bandpass', 3200, 5, 0.3); this._tone('square', 500, 350, 0.05, 0.12, 0.04); }
   swap() { this._noise(0.09, 'bandpass', 1400, 2, 0.15); }
-  hit() { this._tone('square', 1500, 1200, 0.035, 0.1); }
-  headshot() { this._tone('square', 2200, 1600, 0.06, 0.16); this._tone('sine', 880, 440, 0.12, 0.2); }
-  kill() { this._tone('triangle', 520, 780, 0.09, 0.16); }
+  // bullet into flesh: a short, quiet wet thud (no hit-marker beeps)
+  hit() { this._sample('splat', 1.5 + Math.random() * 0.3, 0.28, 0.04); }
+  headshot() { this._sample('splat', 1.25 + Math.random() * 0.2, 0.4, 0.04); }
+  kill() { /* the gore sound covers it */ }
   // bullet striking a wall, floor or furniture; quieter the further away it lands
   impact(dist = 0) { this._sample('impact', 0.9 + Math.random() * 0.3, Math.max(0.12, 0.6 * (1 - dist / 30)), 0.19); }
   // knife through flesh
