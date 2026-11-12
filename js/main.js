@@ -153,7 +153,6 @@ class Game {
     this.face = { phase: 'warn', t: 0, sprite: null, route: null, seg: 0, pos: new THREE.Vector3() };
     this.world.flicker = true;
     this.music.play('face', { loop: false });
-    this.hud.announce('THE LIGHTS', 'Hide in a wardrobe — F', 3.5);
   }
 
   _faceRoute() {
@@ -204,7 +203,7 @@ class Game {
       if (f.seg >= f.route.length - 1) { this.scene.remove(f.sprite); f.sprite = null; f.phase = 'out'; f.t = 0; }
       return;
     }
-    if (f.t > 1.2) { this.world.flicker = false; if (this.music.cur === 'face') this.music.stop(); this.face = null; this.hud.announce('IT PASSED', '', 2); }
+    if (f.t > 1.2) { this.world.flicker = false; if (this.music.cur === 'face') this.music.stop(); this.face = null; }
   }
 
   _hide(it) {
@@ -278,7 +277,6 @@ class Game {
     this.screen = null;
     this._hideAllScreens();
     this.hud.show(true);
-    this.hud.announce('FLOOR ' + this.floor, 'Find the stairs down', 3);
     this.lockPointer();
   }
 
@@ -288,7 +286,7 @@ class Game {
     this.addChips(bonus);
     this.floor++;
     this._buildHotel();
-    this.hud.announce('FLOOR ' + this.floor, `+${bonus} chips • deeper into the hotel`, 3);
+    this.hud.popup('+' + bonus + ' chips', '#ffd65e');
   }
 
   pause() {
@@ -491,7 +489,7 @@ class Game {
     else if (type === 'double') this.doubleT = 30;
     else if (type === 'insta') this.instaT = 30;
     else if (type === 'chips') { this.addChips(50); sub = '+50 chips'; }
-    this.hud.announce(POWERUPS[type].name, sub, 2);
+    this.hud.popup(POWERUPS[type].name + (sub ? ' ' + sub : ''), '#ffd65e');
   }
 
   // ---------------------------------------------------------------- interactables
@@ -586,7 +584,7 @@ class Game {
     if (pk.id === 'hands') this.weapons.reloadMult = 0.5;
     const css = '#' + pk.color.toString(16).padStart(6, '0');
     this.perkHtml += `<span style="color:${css}">${pk.name.toUpperCase()}</span>`;
-    this.hud.announce(pk.name.toUpperCase(), pk.desc, 2);
+    this.hud.popup(pk.name, css);
   }
 
   _setBoxModel(id) {
