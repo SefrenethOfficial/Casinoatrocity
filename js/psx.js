@@ -28,11 +28,11 @@ export class PsxPipeline {
       type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: true,
     });
     this.material = new THREE.ShaderMaterial({
-      uniforms: { tDiffuse: { value: this.target.texture }, uExposure: { value: 1.25 } },
+      uniforms: { tDiffuse: { value: this.target.texture }, uExposure: { value: 1.25 }, uPsx: { value: 1 } },
       depthTest: false, depthWrite: false, toneMapped: false,
       vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
       fragmentShader: `
-        uniform sampler2D tDiffuse; uniform float uExposure; varying vec2 vUv;
+        uniform sampler2D tDiffuse; uniform float uExposure; uniform float uPsx; varying vec2 vUv;
         float bayer2(vec2 a) { a = floor(a); return fract(a.x / 2.0 + a.y * a.y * 0.75); }
         float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
         void main() {
@@ -40,7 +40,7 @@ export class PsxPipeline {
           c = clamp((c * (2.51 * c + 0.03)) / (c * (2.43 * c + 0.59) + 0.14), 0.0, 1.0);  // filmic curve
           c = pow(c, vec3(1.0 / 2.2));
           float d = bayer4(gl_FragCoord.xy) - 0.5;
-          c = floor(c * 31.0 + 0.5 + d) / 31.0;                                          // 5 bits per channel
+          if (uPsx > 0.5) c = floor(c * 31.0 + 0.5 + d) / 31.0;                           // 5 bits per channel
           gl_FragColor = vec4(c, 1.0);
         }`,
     });
@@ -52,11 +52,15 @@ export class PsxPipeline {
   }
 
   // `lines` is the vertical resolution (240 = PSX). Width follows the window's aspect ratio.
-  setSize(windowW, windowH, lines) {
-    const h = lines, w = Math.max(160, Math.round(h * Math.min(windowW / windowH, 2.4)));
+  // With `psx` off the game renders at the window's own resolution with no wobble or dither.
+  setSize(windowW, windowH, lines, psx = true) {
+    let w, h;
+    if (psx) { h = lines; w = Math.max(160, Math.round(h * Math.min(windowW / windowH, 2.4))); }
+    else { const pr = Math.min(window.devicePixelRatio || 1, 1.5); w = Math.max(160, Math.round(windowW * pr)); h = Math.max(120, Math.round(windowH * pr)); }
     this.renderer.setSize(w, h, false);
     this.target.setSize(w, h);
-    snapUniform.value.set(w / 2.6, h / 2.6);
+    if (psx) snapUniform.value.set(w / 2.6, h / 2.6); else snapUniform.value.set(1e6, 1e6);
+    this.material.uniforms.uPsx.value = psx ? 1 : 0;
   }
 
   begin() {

@@ -12,7 +12,7 @@ function defaults() {
     bestRound: 0,
     totalKills: 0,
     casesOpened: 0,
-    settings: { sens: 1, volume: 0.7, fov: 78, res: 240 },
+    settings: { sens: 1, volume: 0.7, fov: 78, res: 240, psx: true },
   };
 }
 

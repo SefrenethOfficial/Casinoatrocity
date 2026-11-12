@@ -17,7 +17,7 @@ import { CaseUI } from './cases.js';
 import { buildWeaponModel, disposeWeaponModel } from './models.js';
 
 const $ = id => document.getElementById(id);
-const SCREENS = ['splash', 'cases', 'armory', 'settings', 'pause', 'death', 'admin', 'elevator'];
+const SCREENS = ['cases', 'armory', 'settings', 'pause', 'death', 'admin', 'elevator'];
 const POWERUPS = {
   max:    { name: 'MAX AMMO',      color: 0x3dff7a },
   double: { name: 'DOUBLE POINTS', color: 0xffd65e },
@@ -74,9 +74,9 @@ class Game {
     this.flashlight = null;
 
     this.input = { keys: new Set(), pressed: new Set(), mouse: [false, false, false], mousePressed: [false, false, false], wheel: 0 };
-    this.state = 'splash';
-    this.screen = 'splash';
-    this.screenReturn = 'splash';
+    this.state = 'lobby';
+    this.screen = null;
+    this.screenReturn = 'lobby';
     this.locked = false;
     this.time = 0;
     this.last = performance.now();
@@ -99,7 +99,7 @@ class Game {
     this._bindEvents();
     this._bindMenus();
     this.resize();
-    this.showScreen('splash');
+    this.music.play('lobby');   // browsers hold this until the first click
     this.renderer.setAnimationLoop(() => this.frame());
   }
 
@@ -279,9 +279,10 @@ class Game {
   _deathReport() {
     const room = this.world.roomAt ? this.world.roomAt(this.player.pos.x, this.player.pos.z) : 0;
     const INFO = {
-      ghoul: { title: 'TORN APART', what: 'A ghoul dragged you down and tore you apart', tip: 'Ghouls are slow but they swarm. Keep backpedalling, never stand still in a doorway, and thin the pack before it reaches you.' },
-      crawler: { title: 'RUN DOWN', what: 'A crawler ran you down and opened your throat', tip: 'Crawlers are fast and stay low. When you hear the screech, turn and fire early and aim at the floor in front of you, or draw the knife and outrun it.' },
-      brute: { title: 'CRUSHED', what: 'A brute caved your skull in', tip: 'Brutes soak up damage and hit like a truck. Never trade blows up close: back away through the room and empty a magazine into its head.' },
+      bellhop: { title: 'TORN APART', what: 'A bellhop dragged you down and tore you apart', tip: 'Bellhops are slow but they swarm. Keep backpedalling, never stand still in a doorway, and thin the pack before it reaches you.' },
+      maid: { title: 'RUN DOWN', what: 'A maid sprinted you down and clawed you open', tip: 'Maids are fragile but very fast. When you hear the shriek, stop and face it: two or three body shots drop one before it reaches you.' },
+      lodger: { title: 'DRAGGED UNDER', what: 'A lodger scuttled in low and opened your throat', tip: 'Lodgers stay below your crosshair. Aim at the floor in front of you and fire early, or draw the knife and outrun it.' },
+      butcher: { title: 'BUTCHERED', what: 'The butcher split your skull with his cleaver', tip: 'The butcher soaks up damage and one chop nearly kills you. Never trade blows up close: back away through the room and empty a magazine into the sack on his head.' },
     };
     const info = (this.lastHit && INFO[this.lastHit.type]) || { title: 'YOU DIED', what: 'You bled out', tip: 'Watch your health bar. Back off and let it regenerate before you push the next room.' };
     const what = `${info.what} on floor ${this.floor}${room ? ', room ' + room : ''}.`;
@@ -362,7 +363,7 @@ class Game {
       z.head.visible = false;
       const neck = new THREE.Vector3(z.x, z.neckY, z.z);
       fx.gib(neck, fling, 0.3 * z.scale, 1); fx.gibs_(neck, dir, 3, 3.5, 0.12); fx.fountain(neck, 1.3, 4.5);
-    } else if (z.type !== 'crawler' && Math.random() < 0.55) {
+    } else if (z.rig !== 'crawl' && Math.random() < 0.55) {
       const arm = z.arms[(Math.random() * z.arms.length) | 0]; arm.visible = false;
       const shoulder = new THREE.Vector3(z.x, z.neckY - 0.1 * z.scale, z.z);
       fx.gib(shoulder, fling, 0.22 * z.scale, 1); fx.fountain(shoulder, 0.8, 3);
@@ -541,7 +542,6 @@ class Game {
     if (this.state === 'playing') this.update(dt);
     else if (this.state === 'lobby') this.updateLobby(dt);
     else if (this.state === 'dead') this._deadUpdate(dt);
-    else if (this.state === 'splash') this._menuCamera();
     if (!this._canMove) { this.hud.setPrompt(''); $('lock-hint').classList.add('hidden'); }
 
     this.world.update(Math.floor(this.time * 12) / 12);
@@ -594,14 +594,6 @@ class Game {
     this.flashlight.target.updateMatrixWorld();
   }
 
-  // Before the first click you are already standing in the yard, looking up at the hotel.
-  _menuCamera() {
-    const p = this.lobby.playerSpawn, t = Math.floor(this.time * 15) / 15;
-    this.camera.position.set(p.x + Math.sin(t * 0.35) * 0.25, 1.62, p.z);
-    this.camera.rotation.set(0.2 + Math.sin(t * 0.5) * 0.02, Math.PI + Math.sin(t * 0.22) * 0.07, 0);
-    if (this.camera.fov !== save.settings.fov) { this.camera.fov = save.settings.fov; this.camera.updateProjectionMatrix(); }
-  }
-
   _storm(dt) {
     const outside = (this.world === this.lobby) && this.lobby.isOutdoor(this.camera.position.x, this.camera.position.z);
     this.rain.update(dt, this.camera.position, outside);
@@ -620,7 +612,7 @@ class Game {
 
   resize() {
     const w = window.innerWidth, h = window.innerHeight;
-    this.psx.setSize(w, h, save.settings.res);
+    this.psx.setSize(w, h, save.settings.res, save.settings.psx !== false);
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
     this.weapons.vmCamera.aspect = w / h; this.weapons.vmCamera.updateProjectionMatrix();
   }
@@ -669,10 +661,11 @@ class Game {
     window.addEventListener('wheel', e => { if (this._canMove) i.wheel = Math.sign(e.deltaY); }, { passive: true });
   }
 
-  _toSplash() {
-    this.state = 'splash'; this.screen = 'splash';
-    this.hud.show(false);
-    this.showScreen('splash');
+  // Close whatever overlay is open and hand control back in the lobby.
+  _toLobby() {
+    this.state = 'lobby'; this.screen = null;
+    this._hideAllScreens();
+    this.lockPointer();
   }
 
   // ---------------------------------------------------------------- screens
@@ -680,19 +673,14 @@ class Game {
   showScreen(name) {
     this.screen = name;
     for (const s of SCREENS) $('screen-' + s).classList.toggle('hidden', s !== name);
-    if (name === 'splash') { this.cases.refreshChips(); $('stat-best').textContent = save.bestRound; $('stat-kills').textContent = save.totalKills.toLocaleString(); }
+    if (name === 'pause') { this.cases.refreshChips(); $('stat-best').textContent = save.bestRound; $('stat-kills').textContent = save.totalKills.toLocaleString(); }
     else if (name === 'cases') this.cases.showCases();
     else if (name === 'armory') this.cases.showArmory();
     else if (name === 'settings') this._syncSettings();
     else if (name === 'elevator') this._syncElevator();
   }
 
-  _backFromScreen() {
-    // close a cases/armory/settings overlay opened from the lobby or splash
-    const ret = this.screenReturn;
-    if (ret === 'lobby') { this.state = 'lobby'; this.screen = null; this._hideAllScreens(); this.lockPointer(); }
-    else this._toSplash();
-  }
+  _backFromScreen() { this._toLobby(); }
 
   // ---------------------------------------------------------------- admin
   _bindAdmin() {
@@ -715,7 +703,7 @@ class Game {
   _unlockAdmin() { this.admin.unlocked = true; try { localStorage.setItem('casinoatrocity.admin', '1'); } catch (e) { /* off */ } }
   _closeAdmin() {
     if (this._adminReturn === 'resume') { this._adminReturn = null; this.state = 'paused'; this._prePause = this._adminReturnState; this.resume(); }
-    else this.showScreen(this._adminReturn && this._adminReturn !== 'admin' ? this._adminReturn : 'splash');
+    else if (this._adminReturn && this._adminReturn !== 'admin') this.showScreen(this._adminReturn); else this._toLobby();
   }
   _adminMsg(t) { $('adm-msg').textContent = t; }
   _adminAct(act) {
@@ -738,6 +726,8 @@ class Game {
     $('set-sens').value = s.sens; $('out-sens').textContent = Number(s.sens).toFixed(2);
     $('set-fov').value = s.fov; $('out-fov').textContent = s.fov + '°';
     $('set-res').value = String(s.res);
+    $('set-psx').checked = s.psx !== false;
+    $('row-res').classList.toggle('off', s.psx === false);
     $('set-vol').value = s.volume; $('out-vol').textContent = Math.round(s.volume * 100) + '%';
   }
 
@@ -760,16 +750,15 @@ class Game {
       else if (act === 'cases' || act === 'knives' || act === 'armory') {
         if (this.cases.spinning) return;
         if (act === 'cases' || act === 'knives') this.cases.kind = act === 'knives' ? 'knives' : 'guns';
-        if (this.screen === 'splash') this.screenReturn = 'splash';
         this.state = 'screen';
         this.showScreen(act === 'knives' ? 'cases' : act);
       }
     });
-    $('screen-splash').addEventListener('click', e => { if (this.state === 'splash' && !e.target.closest('.ll')) this.enterLobby(); });
     $('buy-flash').addEventListener('click', () => { if (!this.hasLight && this.spend2(FLASH_COST)) { this.hasLight = true; this.audio.upgrade(); this._syncElevator(); } });
     $('buy-picks').addEventListener('click', () => { if (this.spend2(PICK_COST)) { this.lockpicks += PICK_QTY; this.audio.buy(); this._syncElevator(); } });
     $('set-sens').addEventListener('input', e => { save.settings.sens = parseFloat(e.target.value); this._syncSettings(); });
     $('set-fov').addEventListener('input', e => { save.settings.fov = parseInt(e.target.value, 10); this._syncSettings(); });
+    $('set-psx').addEventListener('change', e => { save.settings.psx = e.target.checked; this.resize(); this._syncSettings(); });
     $('set-res').addEventListener('change', e => { save.settings.res = parseInt(e.target.value, 10); this.resize(); });
     $('set-vol').addEventListener('input', e => { save.settings.volume = parseFloat(e.target.value); this.audio.setVolume(save.settings.volume); this.music.setVolume(Math.min(1, save.settings.volume * 0.8)); this._syncSettings(); });
     $('reset-save').addEventListener('click', () => { if (!confirm('Reset all chips, skins and records?')) return; this.wiping = true; localStorage.removeItem('casinoatrocity.save.v1'); location.reload(); });

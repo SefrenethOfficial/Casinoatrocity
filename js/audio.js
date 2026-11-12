@@ -10,7 +10,7 @@ const SHOTS = {
   sniper:   { rate: 0.52, vol: 1.0,  dur: 0.5,  freq: 1100, q: 0.5, gain: 0.85, thump: 90,  thumpGain: 1.0, boom: true },
   revolver: { rate: 0.7,  vol: 1.0,  dur: 0.42, freq: 1300, q: 0.6, gain: 0.8,  thump: 110, thumpGain: 0.95, boom: true },
 };
-const SAMPLES = { shot: 'assets/sfx/shot.mp3', click: 'assets/sfx/click.mp3', upgrade: 'assets/sfx/upgrade.mp3' };
+const SAMPLES = { shot: 'assets/sfx/shot.mp3', click: 'assets/sfx/click.mp3', upgrade: 'assets/sfx/upgrade.mp3', door: 'assets/sfx/door.mp3' };
 const SHOT_LEAD_IN = 0.06;   // the gunshot recording starts with a short silence
 
 export class AudioSys {
@@ -132,6 +132,7 @@ export class AudioSys {
     this._noise(0.25, 'bandpass', 600, 1.5, 0.22, 0.12, 200);
   }
   door() {
+    if (this._sample('door', 1, 0.9)) return;
     this._noise(1.6, 'lowpass', 220, 1.5, 0.55, 0, 90);
     this._tone('sawtooth', 48, 40, 1.5, 0.3);
     this._noise(0.12, 'bandpass', 900, 2, 0.4, 1.5, 300);

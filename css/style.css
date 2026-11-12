@@ -40,8 +40,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
   background: radial-gradient(ellipse at 30% 40%, rgba(40, 8, 16, 0.55), rgba(5, 2, 3, 0.9));
 }
 #screen-cases, #screen-armory { background: linear-gradient(180deg, rgba(14, 5, 8, 0.97), rgba(8, 3, 5, 0.94)); }
-#screen-splash { display: flex; align-items: flex-end; cursor: pointer; background: linear-gradient(0deg, rgba(6, 2, 4, 0.92) 0%, rgba(6, 2, 4, 0.55) 34%, rgba(6, 2, 4, 0) 62%); }
-#screen-splash.hidden { display: none; }
 .menu-wrap { width: min(520px, 92vw); margin-left: clamp(18px, 7vw, 110px); padding: 24px 0; }
 .logo { font-family: var(--display); line-height: 0.86; margin-bottom: 34px; }
 .logo-top { font-size: clamp(54px, 9vw, 104px); color: var(--gold); letter-spacing: 0.04em; text-shadow: 0 0 28px rgba(255, 190, 60, 0.45); }
@@ -271,12 +269,18 @@ kbd:first-child { margin-left: 0; }
 .elev-have { margin: 0; font-size: 13px; color: var(--gold); letter-spacing: 0.06em; }
 .elevator .balance { justify-content: center; }
 
-.enter-hint { font-family: var(--display); font-size: 24px; letter-spacing: 0.22em; text-transform: uppercase; color: #fff; text-shadow: 0 0 14px rgba(255, 190, 60, 0.7), 2px 2px 0 #000; animation: hintpulse 1.5s steps(4) infinite; }
+.logo.small { margin-bottom: 4px; text-align: center; }
+.logo.small .logo-top { font-size: clamp(34px, 5vw, 56px); }
+.logo.small .logo-bottom { font-size: clamp(28px, 4.2vw, 46px); }
+.pause.panel { gap: 16px; }
+.pause-nav { display: grid; gap: 10px; width: min(340px, 100%); margin: 0 auto; }
+.pause .menu-stats { justify-content: center; margin-top: 4px; }
+.pause .controls-help { margin: 0 auto; text-align: center; }
+.check.big { font-size: 15px; color: var(--text); flex-wrap: wrap; }
+.check.big small { flex-basis: 100%; color: var(--muted); font-size: 12px; }
+#row-res.off { opacity: 0.4; pointer-events: none; }
+#lock-hint { font-family: var(--display) !important; font-size: 26px !important; letter-spacing: 0.2em; text-transform: uppercase; animation: hintpulse 1.5s steps(4) infinite; }
 @keyframes hintpulse { 50% { opacity: 0.35; } }
-#screen-splash .logo { margin-bottom: 18px; }
-#screen-splash .menu-stats { margin-top: 18px; }
-#screen-splash .controls-help { margin-top: 14px; max-width: 760px; }
-#screen-splash .menu-wrap { width: min(820px, 94vw); padding-bottom: 30px; }
 
 #overlay { position: fixed; inset: 0; z-index: 11; pointer-events: none; }
 
