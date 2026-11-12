@@ -106,8 +106,8 @@ class Game {
   // ---------------------------------------------------------------- scenes
   _buildLobby() {
     this.lobbyScene = new THREE.Scene();
-    this.lobbyScene.background = new THREE.Color(0x05060b);
-    this.lobbyScene.fog = new THREE.Fog(0x05060b, 6, 40);
+    this.lobbyScene.background = new THREE.Color(0x0a0d16);
+    this.lobbyScene.fog = new THREE.Fog(0x0a0d16, 10, 60);
     this.lobby = new Lobby(this.lobbyScene);
     this.rain = new Rain(this.lobbyScene);
     this.stormT = 2 + Math.random() * 4;
@@ -122,8 +122,8 @@ class Game {
   // Generate a fresh hotel floor and swap into it.
   _buildHotel() {
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x030204);
-    scene.fog = new THREE.Fog(0x030204, 3, 26);
+    scene.background = new THREE.Color(0x0a0806);
+    scene.fog = new THREE.Fog(0x0a0806, 5, 38);
     this.world = new World(scene, this.floor);
     this.scene = scene;
     this.effects = new Effects(scene, this.world);
@@ -242,7 +242,9 @@ class Game {
   // ---------------------------------------------------------------- death
   gameOver() {
     if (this.state !== 'playing') return;
+    const report = this._deathReport();
     this.state = 'dead';
+    this.deathT = 0;
     this.audio.gameOver();
     this.music.play('death', { loop: false });
     this._commitRun();
@@ -250,34 +252,50 @@ class Game {
     this.unlockPointer();
     this.hud.show(false);
 
-    const { title, what, tip } = this._deathReport();
-    $('death-what').textContent = what;
-    $('death-tip').textContent = tip;
+    $('death-title').textContent = report.title;
+    $('death-what').textContent = report.what;
+    $('death-detail').textContent = report.detail;
+    $('death-tip').innerHTML = report.tips.map(t => `<li>${t}</li>`).join('');
     $('death-floor').textContent = this.floor;
     $('death-rooms').textContent = this.visited.size;
     $('death-kills').textContent = this.kills;
     $('death-chips').textContent = '+' + this.sessionChips;
-    $('death-title').textContent = title;
     this.showScreen('death');
+    const el = $('screen-death'); el.classList.remove('play'); void el.offsetWidth; el.classList.add('play');
   }
 
+  // You stay in the world while the death screen fades in: the camera drops to the floorboards.
+  _deadUpdate(dt) {
+    this.deathT += dt;
+    this.zombies.update(dt);
+    this.effects.update(dt);
+    const cam = this.camera, k = Math.min(1, dt * 5);
+    cam.position.y += (0.3 - cam.position.y) * k;
+    cam.rotation.z += (1.2 - cam.rotation.z) * k;
+    cam.rotation.x += (0.25 - cam.rotation.x) * k;
+  }
+
+  // What killed you, the state you were in when it happened, and what to do about it next time.
   _deathReport() {
     const room = this.world.roomAt ? this.world.roomAt(this.player.pos.x, this.player.pos.z) : 0;
-    const h = this.lastHit;
-    const TIPS = {
-      ghoul: 'Ghouls are slow but they swarm. Keep backpedalling, never stop in a doorway, and open a new room to break line of sight.',
-      crawler: 'Crawlers are fast and stay low, so they close the gap quickly. Hear the screech, turn, and fire early — or draw the knife and keep running.',
-      brute: 'Brutes soak damage and hit like a truck. Don’t trade blows up close: back through a door, pour a magazine into the head, and save a heavy knife stab for when it lunges.',
+    const INFO = {
+      ghoul: { title: 'TORN APART', what: 'A ghoul dragged you down and tore you apart', tip: 'Ghouls are slow but they swarm. Keep backpedalling, never stand still in a doorway, and thin the pack before it reaches you.' },
+      crawler: { title: 'RUN DOWN', what: 'A crawler ran you down and opened your throat', tip: 'Crawlers are fast and stay low. When you hear the screech, turn and fire early and aim at the floor in front of you, or draw the knife and outrun it.' },
+      brute: { title: 'CRUSHED', what: 'A brute caved your skull in', tip: 'Brutes soak up damage and hit like a truck. Never trade blows up close: back away through the room and empty a magazine into its head.' },
     };
-    if (!h || !h.type) {
-      return { title: 'GUEST DECEASED', what: `You bled out on floor ${this.floor}.`, tip: 'Watch your health bar — back off and let it regenerate before pushing the next room.' };
-    }
-    const names = { ghoul: 'a ghoul', crawler: 'a crawler', brute: 'a brute' };
-    return {
-      title: 'GUEST DECEASED',
-      what: `${(names[h.type] || 'something')[0].toUpperCase()}${(names[h.type] || 'something').slice(1)} tore you apart on floor ${this.floor}${room ? ', room ' + room : ''}, after ${this.kills} kill${this.kills === 1 ? '' : 's'}.`,
-      tip: TIPS[h.type] || 'Keep moving, keep a wall at your back, and buy a better gun before you go deeper.',
-    };
+    const info = (this.lastHit && INFO[this.lastHit.type]) || { title: 'YOU DIED', what: 'You bled out', tip: 'Watch your health bar. Back off and let it regenerate before you push the next room.' };
+    const what = `${info.what} on floor ${this.floor}${room ? ', room ' + room : ''}.`;
+    const w = this.weapons, def = w.def, slot = w.slot, notes = [], tips = [info.tip];
+    const left = this.zombies.remaining;
+    if (left > 2) { notes.push(`${left} of them were still in the room`); tips.push('You were outnumbered. A fresh room wakes up a fresh pack, so finish the room you are in before you open the next door.'); }
+    if (w.knifeOut) { notes.push('you only had your knife out'); tips.push('The knife is for running, not for standing your ground. Sprint to open space, then switch back to a gun.'); }
+    else if (slot && def && !def.melee && slot.mag === 0) { notes.push(`your ${def.name} was empty`); tips.push('You died with an empty magazine. Reload while the room is quiet, and buy ammo before it runs out.'); }
+    else if (w.reloading && def) { notes.push(`you were caught reloading your ${def.name}`); tips.push('Reloading roots you to the spot. Swap to your other gun or the knife instead of reloading with something in your face.'); }
+    const lamp = this.world.lamps && this.world.lamps[room - 1];
+    if (lamp && lamp.intensity < 1 && !this.lightOn) { notes.push('the room was pitch black'); tips.push('The lamp in that room was dead. A flashlight from the elevator shop lets you see what is coming.'); }
+    if (this.points >= 1000) tips.push(`You died holding ${Math.floor(this.points).toLocaleString()} unspent points. Spend them on guns, tonics and ammo as you go.`);
+    const detail = notes.length ? notes.join(', ').replace(/^./, c => c.toUpperCase()) + '.' : `You made it through ${this.visited.size} room${this.visited.size === 1 ? '' : 's'} and took ${this.kills} of them with you.`;
+    return { title: info.title, what, detail, tips: tips.slice(0, 3) };
   }
 
   _commitRun() {
@@ -468,9 +486,9 @@ class Game {
       else { html = `${key}Take <b>${WEAPONS[b.weapon].name}</b>`; use = () => { this.weapons.give(b.weapon); this._setBoxModel(null); b.state = 'idle'; }; }
     } else if (door) {
       if (door.locked) {
-        if (this.lockpicks > 0) { html = `${key}Pick the lock — door ${door.number} <b>(${this.lockpicks} left)</b>`; use = () => { this.lockpicks--; this.world.openDoor(door); this.audio.door(); this.hud.popup('Lock picked', '#9fdc6a'); }; }
+        if (this.lockpicks > 0) { html = `${key}Pick the lock — door ${door.number} <b>(${this.lockpicks} left)</b>`; use = () => { this.lockpicks--; this.world.openDoor(door, this.player.pos.x, this.player.pos.z); this.audio.door(); this.hud.popup('Lock picked', '#9fdc6a'); }; }
         else html = `Door ${door.number} is locked — need a lockpick`;
-      } else { html = `${key}Open door ${door.number}`; use = () => { this.world.openDoor(door); this.audio.door(); }; }
+      } else { html = `${key}Open door ${door.number}`; use = () => { this.world.openDoor(door, this.player.pos.x, this.player.pos.z); this.audio.door(); }; }
     }
     this.promptHtml = html;
     if (use && this.input.pressed.has('KeyF')) use();
@@ -522,7 +540,9 @@ class Game {
 
     if (this.state === 'playing') this.update(dt);
     else if (this.state === 'lobby') this.updateLobby(dt);
+    else if (this.state === 'dead') this._deadUpdate(dt);
     else if (this.state === 'splash') this._menuCamera();
+    if (!this._canMove) { this.hud.setPrompt(''); $('lock-hint').classList.add('hidden'); }
 
     this.world.update(Math.floor(this.time * 12) / 12);
     this._storm(dt);
@@ -574,11 +594,12 @@ class Game {
     this.flashlight.target.updateMatrixWorld();
   }
 
+  // Before the first click you are already standing in the yard, looking up at the hotel.
   _menuCamera() {
-    const [cx, cz] = this.lobby.lawnCenter, a = Math.floor(this.time * 15) / 15 * 0.06;
-    this.camera.position.set(cx + Math.cos(a) * 3, 2.0, cz + 2 + Math.sin(a) * 2);
-    this.camera.lookAt(cx + Math.cos(a + 2.2) * 4, 1.3, cz + 4 + Math.sin(a + 2.2) * 4);
-    if (this.camera.fov !== 70) { this.camera.fov = 70; this.camera.updateProjectionMatrix(); }
+    const p = this.lobby.playerSpawn, t = Math.floor(this.time * 15) / 15;
+    this.camera.position.set(p.x + Math.sin(t * 0.35) * 0.25, 1.62, p.z);
+    this.camera.rotation.set(0.2 + Math.sin(t * 0.5) * 0.02, Math.PI + Math.sin(t * 0.22) * 0.07, 0);
+    if (this.camera.fov !== save.settings.fov) { this.camera.fov = save.settings.fov; this.camera.updateProjectionMatrix(); }
   }
 
   _storm(dt) {
@@ -618,12 +639,12 @@ class Game {
     document.addEventListener('visibilitychange', () => { if (document.hidden && this.state === 'playing') this.pause(); });
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === this.canvas;
-      if (!this.locked && this.state === 'playing') this.pause();
+      if (!this.locked && (this.state === 'playing' || this.state === 'lobby')) this.pause();
     });
     window.addEventListener('keydown', e => {
       if (e.code === 'Backquote' && this.admin.unlocked) { e.preventDefault(); if (this.screen === 'admin') this._closeAdmin(); else this._openAdmin(); return; }
       if (this._canMove) {
-        if (e.code === 'Escape' || e.code === 'KeyP') { this.unlockPointer(); if (this.state === 'lobby') this._toSplash(); else this.pause(); return; }
+        if (e.code === 'Escape' || e.code === 'KeyP') { this.pause(); this.unlockPointer(); return; }
         if (!i.keys.has(e.code)) i.pressed.add(e.code);
         i.keys.add(e.code);
         if (['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'KeyF', 'KeyQ', 'KeyR', 'KeyE', 'KeyL'].includes(e.code)) e.preventDefault();
@@ -729,7 +750,7 @@ class Game {
       if (act === 'enter') this.enterLobby();
       else if (act === 'resume') this.resume();
       else if (act === 'quit') this.quitToLobby();
-      else if (act === 'lobby') this.enterLobby();
+      else if (act === 'lobby') this.quitToLobby();
       else if (act === 'descend') this.descend();
       else if (act === 'elev-back') this.enterLobby();
       else if (act === 'settings') { this.screenReturn = this.screen === 'pause' ? 'pause' : this.screen; this._settingsReturn = this.screen; this.showScreen('settings'); }
@@ -744,6 +765,7 @@ class Game {
         this.showScreen(act === 'knives' ? 'cases' : act);
       }
     });
+    $('screen-splash').addEventListener('click', e => { if (this.state === 'splash' && !e.target.closest('.ll')) this.enterLobby(); });
     $('buy-flash').addEventListener('click', () => { if (!this.hasLight && this.spend2(FLASH_COST)) { this.hasLight = true; this.audio.upgrade(); this._syncElevator(); } });
     $('buy-picks').addEventListener('click', () => { if (this.spend2(PICK_COST)) { this.lockpicks += PICK_QTY; this.audio.buy(); this._syncElevator(); } });
     $('set-sens').addEventListener('input', e => { save.settings.sens = parseFloat(e.target.value); this._syncSettings(); });

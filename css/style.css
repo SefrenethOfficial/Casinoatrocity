@@ -40,7 +40,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
   background: radial-gradient(ellipse at 30% 40%, rgba(40, 8, 16, 0.55), rgba(5, 2, 3, 0.9));
 }
 #screen-cases, #screen-armory { background: linear-gradient(180deg, rgba(14, 5, 8, 0.97), rgba(8, 3, 5, 0.94)); }
-#screen-splash { display: flex; align-items: center; background: linear-gradient(90deg, rgba(8, 3, 5, 0.94) 0%, rgba(8, 3, 5, 0.75) 38%, rgba(8, 3, 5, 0.1) 75%); }
+#screen-splash { display: flex; align-items: flex-end; cursor: pointer; background: linear-gradient(0deg, rgba(6, 2, 4, 0.92) 0%, rgba(6, 2, 4, 0.55) 34%, rgba(6, 2, 4, 0) 62%); }
+#screen-splash.hidden { display: none; }
 .menu-wrap { width: min(520px, 92vw); margin-left: clamp(18px, 7vw, 110px); padding: 24px 0; }
 .logo { font-family: var(--display); line-height: 0.86; margin-bottom: 34px; }
 .logo-top { font-size: clamp(54px, 9vw, 104px); color: var(--gold); letter-spacing: 0.04em; text-shadow: 0 0 28px rgba(255, 190, 60, 0.45); }
@@ -270,11 +271,45 @@ kbd:first-child { margin-left: 0; }
 .elev-have { margin: 0; font-size: 13px; color: var(--gold); letter-spacing: 0.06em; }
 .elevator .balance { justify-content: center; }
 
-.death.panel { gap: 14px; }
-.death-what { margin: 0; font-size: 18px; color: var(--text); }
-.death-tip { border: 1px solid var(--line); background: rgba(255,214,94,0.05); padding: 12px 16px; text-align: left; }
-.death-tip-label { font-family: var(--display); letter-spacing: 0.18em; text-transform: uppercase; font-size: 13px; color: var(--gold); }
-.death-tip p { margin: 6px 0 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.enter-hint { font-family: var(--display); font-size: 24px; letter-spacing: 0.22em; text-transform: uppercase; color: #fff; text-shadow: 0 0 14px rgba(255, 190, 60, 0.7), 2px 2px 0 #000; animation: hintpulse 1.5s steps(4) infinite; }
+@keyframes hintpulse { 50% { opacity: 0.35; } }
+#screen-splash .logo { margin-bottom: 18px; }
+#screen-splash .menu-stats { margin-top: 18px; }
+#screen-splash .controls-help { margin-top: 14px; max-width: 760px; }
+#screen-splash .menu-wrap { width: min(820px, 94vw); padding-bottom: 30px; }
+
+#overlay { position: fixed; inset: 0; z-index: 11; pointer-events: none; }
+
+/* Full-screen death: the world keeps running behind it while this fades in, piece by piece. */
+#screen-death { background: none; display: flex; text-align: center; overflow: hidden auto; }
+#screen-death.hidden { display: none; }
+#screen-death::before { content: ''; position: fixed; inset: 0; background: radial-gradient(ellipse at 50% 45%, rgba(74, 0, 10, 0.72) 0%, rgba(10, 0, 3, 0.97) 72%); opacity: 0; }
+#screen-death::after { content: ''; position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 220px 60px rgba(120, 0, 12, 0.55); opacity: 0; }
+#screen-death.play::before { animation: deathfade 2.6s ease-in 0.3s forwards; }
+#screen-death.play::after { animation: deathfade 0.5s ease-out forwards; }
+.death-wrap { position: relative; z-index: 1; width: min(900px, 92vw); margin: auto; padding: 22px 0; display: grid; gap: 12px; justify-items: center; }
+.death-wrap > * { opacity: 0; }
+#screen-death.play .death-wrap > * { animation: deathin 0.7s ease-out forwards; }
+#screen-death.play .death-kicker { animation-delay: 1.3s; }
+#screen-death.play #death-title { animation: deathslam 0.55s cubic-bezier(0.2, 1.4, 0.4, 1) 1.9s forwards; }
+#screen-death.play #death-what { animation-delay: 2.7s; }
+#screen-death.play #death-detail { animation-delay: 3.1s; }
+#screen-death.play .over-stats { animation-delay: 3.6s; }
+#screen-death.play .death-tips { animation-delay: 4.2s; }
+#screen-death.play .btn { animation-delay: 5s; }
+@keyframes deathfade { to { opacity: 1; } }
+@keyframes deathin { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes deathslam { from { opacity: 0; transform: scale(2.4); letter-spacing: 0.3em; } to { opacity: 1; transform: none; } }
+.death-kicker { font-family: var(--display); font-size: clamp(13px, 1.6vw, 18px); letter-spacing: 0.34em; text-transform: uppercase; color: var(--muted); }
+#death-title { margin: 0; font-family: var(--display); font-weight: normal; font-size: clamp(48px, min(11vw, 20vh), 150px); white-space: nowrap; line-height: 0.95; letter-spacing: 0.06em; color: var(--crimson); text-shadow: 0 0 46px rgba(220, 16, 46, 0.75), 4px 4px 0 #000; }
+#death-what { margin: 6px 0 0; font-size: clamp(17px, 2.2vw, 24px); color: #fff; }
+#death-detail { margin: 0; font-size: 15px; color: var(--muted); }
+#screen-death .over-stats { width: min(640px, 100%); }
+.death-tips { width: min(640px, 100%); border-left: 3px solid var(--gold); background: rgba(255, 214, 94, 0.06); padding: 12px 18px; text-align: left; }
+.death-tip-label { font-family: var(--display); letter-spacing: 0.18em; text-transform: uppercase; font-size: 14px; color: var(--gold); }
+.death-tips ul { margin: 8px 0 0; padding-left: 18px; color: var(--text); font-size: 14px; line-height: 1.55; }
+.death-tips li + li { margin-top: 6px; }
+#screen-death .btn { width: auto; text-align: center; padding-left: 34px; padding-right: 34px; margin-top: 6px; }
 
 #kit { display: flex; gap: 14px; margin-top: 8px; font-family: var(--body); font-size: 12px; color: var(--muted); letter-spacing: 0.04em; text-shadow: none; }
 #kit b { color: var(--gold); font-weight: 700; }

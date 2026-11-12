@@ -1,9 +1,10 @@
-// The Hotel: a randomly generated floor of dark wooden rooms joined by numbered (sometimes locked)
+// The Hotel: a randomly generated floor of old wooden rooms joined by numbered (sometimes locked)
 // doors. Each floor is a grid of rooms with a guaranteed path from the entry to the stairs down,
 // plus extra doors that branch and loop. Owns collision, the enemy flow-field, and interactables.
 import * as THREE from 'three';
 import { WEAPONS } from './data.js';
 import { buildWeaponModel } from './models.js';
+import { Batcher, tex, speckle, flat, glow, mapped, sprite, mats, furn, wallpaperTex, ceilingTex, rugTex, numberTex, windowTex, elevatorTex, plaqueTex } from './build.js';
 
 export const CELL = 2;
 export const WALL_H = 3.3;
@@ -15,30 +16,22 @@ function mulberry(seed) {
   return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 
-function canvasTexture(w, h, draw, shrink = 2) {
-  const big = document.createElement('canvas'); big.width = w; big.height = h;
-  draw(big.getContext('2d'), w, h);
-  let c = big;
-  if (shrink > 1) { c = document.createElement('canvas'); c.width = Math.max(8, w / shrink | 0); c.height = Math.max(8, h / shrink | 0); c.getContext('2d').drawImage(big, 0, 0, c.width, c.height); }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace; t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.generateMipmaps = false;
-  return t;
-}
-function speckle(g, w, h, n, colors, min = 1, max = 4) {
-  for (let i = 0; i < n; i++) { g.fillStyle = colors[i % colors.length]; const s = min + ((i * 7919) % 97) / 97 * (max - min); g.fillRect(((i * 2654435761) >>> 0) % w, ((i * 40503) >>> 0) % h, s, s); }
-}
-function labelSprite(lines, color = '#d8c38a', scaleX = 1.4) {
-  const tex = canvasTexture(256, 128, (g, w, h) => {
-    g.fillStyle = 'rgba(8,6,5,0.82)'; g.fillRect(0, 0, w, h);
-    g.strokeStyle = color; g.lineWidth = 5; g.strokeRect(4, 4, w - 8, h - 8);
-    g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = color;
-    g.font = 'bold 40px Georgia, serif'; g.fillText(lines[0], w / 2, lines[1] ? 44 : h / 2);
-    if (lines[1]) { g.fillStyle = '#efe6cf'; g.font = 'bold 30px Georgia, serif'; g.fillText(lines[1], w / 2, 90); }
-  }, 1);
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
-  s.scale.set(scaleX, scaleX * 0.5, 1);
-  return s;
-}
+// Each floor is papered differently.
+const PALETTES = [
+  { paper: '#4f5f47', paper2: '#57684e', motif: 'rgba(214,190,110,0.45)', wood: '#4a2f1b', trim: '#2a190d', fabric: 0x5c1a26, rugs: [['#5a1a22', '#2a1210'], ['#3a2a4a', '#1a1220']] },
+  { paper: '#6a2e30', paper2: '#733436', motif: 'rgba(224,180,100,0.45)', wood: '#3f2816', trim: '#24150b', fabric: 0x23402e, rugs: [['#23402e', '#12180f'], ['#5a1a22', '#2a1210']] },
+  { paper: '#3c4a66', paper2: '#44536f', motif: 'rgba(200,200,220,0.35)', wood: '#46301e', trim: '#26180d', fabric: 0x4a3a1a, rugs: [['#1e2c4a', '#0e1220'], ['#4a3a1a', '#1e160a']] },
+  { paper: '#7a6434', paper2: '#84703c', motif: 'rgba(90,30,30,0.45)', wood: '#402a18', trim: '#22140a', fabric: 0x2a2a4a, rugs: [['#5a1a22', '#2a1210'], ['#2a2a4a', '#12121e']] },
+];
+
+const stainTex = () => tex(64, 64, (g, w, h) => {
+  g.clearRect(0, 0, w, h);
+  for (let i = 0; i < 26; i++) { const a = i * 2.4, d = (i * 7 % 22), r = 3 + (i * 5 % 9); g.fillStyle = i % 3 ? 'rgba(70,8,8,0.75)' : 'rgba(40,4,4,0.85)'; g.beginPath(); g.arc(32 + Math.cos(a) * d, 32 + Math.sin(a) * d, r, 0, 6.3); g.fill(); }
+}, 1);
+const stairTex = () => tex(64, 64, (g, w, h) => {
+  g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 6; i++) { const v = 70 - i * 13; g.fillStyle = `rgb(${v},${(v * 0.68) | 0},${(v * 0.45) | 0})`; g.fillRect(4, 4 + i * 9, w - 8, 7); g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(4, 10 + i * 9, w - 8, 2); }
+}, 1);
 
 export const PERKS = {
   thick: { id: 'thick', name: 'Bellhop Tonic', desc: 'double health', cost: 2500, color: 0xff3344 },
@@ -159,100 +152,134 @@ export class World {
 
   // ---- geometry ----
   _build() {
-    const scene = this.scene;
-    const L = (o) => new THREE.MeshLambertMaterial(o);
-    const wallMat = L({ map: this._wallpaper() });
-    const woodMat = L({ map: this._woodTex() });
-    const darkWood = L({ color: 0x241812 });
-    const ironMat = L({ color: 0x2a2a30 });
-    const goldMat = L({ color: 0xb9992f, emissive: 0x241a06 });
-    const fabric = L({ color: 0x4a1420 });
-    this._L = L;
-    this._mats = { woodMat, ironMat, goldMat, darkWood, fabric };
+    const scene = this.scene, M = this.M = mats(), w = this.w;
+    const S = this.S = new Batcher(), D = this.D = new Batcher();
+    const pal = this.pal = PALETTES[(this.floor - 1) % PALETTES.length];
+    const paper = mapped(wallpaperTex(pal));
+    this.fab = flat(pal.fabric);
+    this.rugs = pal.rugs.map(c => mapped(rugTex(c[0], c[1])));
+    this.winMat = new THREE.MeshBasicMaterial({ map: windowTex() });
+    this.stainMat = new THREE.MeshBasicMaterial({ map: stainTex(), transparent: true, depthWrite: false });
+    this.animated.push(t => { const f = Math.sin(t * 0.83) * Math.sin(t * 1.37) > 0.93 && Math.sin(t * 40) > -0.2; this.winMat.color.setRGB(f ? 4 : 1, f ? 4 : 1, f ? 4.5 : 1); });
 
-    const walls = [];
-    for (let cz = 0; cz < this.h; cz++) for (let cx = 0; cx < this.w; cx++) {
-      if (this.blockedGrid[cz * this.w + cx] !== 1) continue;
-      if (this.doors.some(d => d.cx === cx && d.cz === cz)) continue;
+    // walls: one quad for every open cell edge that touches solid wall
+    const doorAt = new Map(); for (const d of this.doors) doorAt.set(d.cz * w + d.cx, d);
+    const solid = (cx, cz) => cx < 0 || cz < 0 || cx >= w || cz >= this.h || (this.blockedGrid[cz * w + cx] === 1 && !doorAt.has(cz * w + cx));
+    for (let cz = 0; cz < this.h; cz++) for (let cx = 0; cx < w; cx++) {
+      if (solid(cx, cz) || doorAt.has(cz * w + cx)) continue;
       const [x, z] = this.center(cx, cz);
-      walls.push({ x, z });
+      if (solid(cx, cz - 1)) S.quad(paper, CELL, WALL_H, x, WALL_H / 2, cz * CELL, 0);
+      if (solid(cx, cz + 1)) S.quad(paper, CELL, WALL_H, x, WALL_H / 2, (cz + 1) * CELL, Math.PI);
+      if (solid(cx - 1, cz)) S.quad(paper, CELL, WALL_H, cx * CELL, WALL_H / 2, z, Math.PI / 2);
+      if (solid(cx + 1, cz)) S.quad(paper, CELL, WALL_H, (cx + 1) * CELL, WALL_H / 2, z, -Math.PI / 2);
     }
-    this.wallMesh = new THREE.Mesh(this._mergeCubes(walls, CELL, WALL_H), wallMat);
-    scene.add(this.wallMesh); this.solids.push(this.wallMesh);
+    const W = w * CELL, Hh = this.h * CELL;
+    S.plane(M.boards, W, Hh, W / 2, 0, Hh / 2, w, this.h);
+    S.plane(mapped(ceilingTex()), W, Hh, W / 2, WALL_H, Hh / 2, w, this.h, true);
 
-    const floorT = this._floorTex(); floorT.wrapS = floorT.wrapT = THREE.RepeatWrapping; floorT.repeat.set(this.w, this.h);
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(this.w * CELL, this.h * CELL), L({ map: floorT }));
-    floor.rotation.x = -Math.PI / 2; floor.position.set(this.w * CELL / 2, 0, this.h * CELL / 2);
-    scene.add(floor); this.solids.push(floor);
-    const ceilT = this._ceilTex(); ceilT.wrapS = ceilT.wrapT = THREE.RepeatWrapping; ceilT.repeat.set(this.w, this.h);
-    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(this.w * CELL, this.h * CELL), L({ map: ceilT }));
-    ceil.rotation.x = Math.PI / 2; ceil.position.set(this.w * CELL / 2, WALL_H, this.h * CELL / 2);
-    scene.add(ceil); this.solids.push(ceil);
-
-    scene.add(new THREE.AmbientLight(0x161320, 0.5));
-    scene.add(new THREE.HemisphereLight(0x24222f, 0x100b07, 0.3));
+    scene.add(new THREE.AmbientLight(0x5a5048, 0.85));
+    scene.add(new THREE.HemisphereLight(0x6a6258, 0x1a120c, 0.5));
 
     for (const r of this.rooms) this._dressRoom(r);
     for (const d of this.doors) this._buildDoor(d);
-  }
-
-  _mergeCubes(list, size, height) {
-    const pos = [], nor = [], uv = [];
-    for (const b of list) { const g = new THREE.BoxGeometry(size, height, size).toNonIndexed(); g.translate(b.x, height / 2, b.z); pos.push(...g.attributes.position.array); nor.push(...g.attributes.normal.array); uv.push(...g.attributes.uv.array); g.dispose(); }
-    const out = new THREE.BufferGeometry();
-    out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
-    out.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-    out.computeBoundingSphere();
-    return out;
+    this.solids.push(...S.build(scene));
+    D.build(scene);
   }
 
   _dressRoom(r) {
-    const scene = this.scene, M = this._mats, L = this._L, rng = this.rng, cx = r.cx, cz = r.cz;
-    const stairs = r.id === this.stairsRoom;
-    const warm = stairs ? 0x9fd8ff : 0xffb86a;
-    const lamp = new THREE.PointLight(warm, 10, 13, 1.7); lamp.position.set(cx, WALL_H - 0.4, cz); scene.add(lamp);
-    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 5), new THREE.MeshBasicMaterial({ color: warm })); bulb.position.copy(lamp.position); scene.add(bulb);
-    const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.5, 4), M.darkWood); cord.position.set(cx, WALL_H - 0.2, cz); scene.add(cord);
+    const scene = this.scene, M = this.M, D = this.D, S = this.S, rng = this.rng, cx = r.cx, cz = r.cz, w = this.w;
+    const stairs = r.id === this.stairsRoom, start = r.id === this.startRoom;
+
+    // rug + hanging lamp
+    if (!stairs) D.plane(this.rugs[r.id % this.rugs.length], 4.8, 4.8, cx, 0.02, cz);
+    const dead = !stairs && !start && rng() < 0.18, flick = !dead && !start && rng() < 0.3;
+    const col = stairs ? 0xd0ffdc : 0xffb86a, base = dead ? 0 : 30;
+    D.cyl(M.iron, 0.02, 0.02, 0.7, cx, WALL_H - 0.35, cz, 4); D.cyl(M.brass, 0.14, 0.14, 0.05, cx, WALL_H - 0.02, cz, 6);
+    D.add(new THREE.MeshLambertMaterial({ color: 0x8a6a3a, side: THREE.DoubleSide, emissive: dead ? 0 : 0x4a3210 }), new THREE.ConeGeometry(0.42, 0.34, 8, 1, true), cx, WALL_H - 0.8, cz);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 4), glow(dead ? 0x2a2620 : 0xffe2a0)); bulb.position.set(cx, WALL_H - 0.92, cz); scene.add(bulb);
+    const lamp = new THREE.PointLight(col, base, 17, 1.4); lamp.position.set(cx, WALL_H - 1.0, cz); scene.add(lamp);
     this.lamps.push(lamp);
-    const flick = !stairs && rng() < 0.5, seed = r.id * 3.3;
-    this.animated.push(t => { const f = flick ? (Math.sin(t * 31 + seed) > -0.7 && Math.sin(t * 7 + seed) > -0.9 ? 1 : 0.14) : (0.85 + 0.15 * Math.sin(t * 2 + seed)); lamp.intensity = 10 * f; bulb.visible = f > 0.3; });
+    if (flick) { const seed = r.id * 3.3; this.animated.push(t => { const on = Math.sin(t * 31 + seed) > -0.6 && Math.sin(t * 7 + seed) > -0.85; lamp.intensity = on ? base : base * 0.12; bulb.visible = on; }); }
 
-    const prop = (geo, mat, x, y, z, ry = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.y = ry; scene.add(m); return m; };
-    prop(new THREE.BoxGeometry(CELL * 2.4, 0.03, CELL * 2.4), M.fabric, cx, 0.02, cz);   // rug
-    if (rng() < 0.6) {
-      const bx = r.x0 * CELL + CELL * 1.4, bz = r.z0 * CELL + CELL * 1.4;
-      prop(new THREE.BoxGeometry(1.3, 0.5, 2.1), M.darkWood, bx, 0.25, bz);
-      prop(new THREE.BoxGeometry(1.3, 0.25, 2.1), L({ color: 0x6a5542 }), bx, 0.6, bz);
-      prop(new THREE.BoxGeometry(1.3, 0.7, 0.2), M.darkWood, bx, 0.6, bz - 1.0);
-    } else {
-      prop(new THREE.BoxGeometry(1.2, 1.2, 0.7), M.woodMat, (r.x0 + ROOM - 1.6) * CELL, 0.6, (r.z0 + 1.2) * CELL);
+    // wall slots: every perimeter cell except the four door positions
+    const used = new Set(), key = (a, b) => b * w + a;
+    const cellOf = (wall, i) => wall === 0 ? [r.x0 + i, r.z0] : wall === 1 ? [r.x0 + i, r.z0 + ROOM - 1] : wall === 2 ? [r.x0, r.z0 + i] : [r.x0 + ROOM - 1, r.z0 + i];
+    const ROT = [0, Math.PI, Math.PI / 2, -Math.PI / 2], NEXT = [1, -1, -1, 1];
+    const at = (wall, i, fn, B = D) => { const [a, b] = cellOf(wall, i), [x, z] = this.center(a, b); B.push(x, 0, z, ROT[wall]); fn(B); B.pop(); };
+    const block = (a, b) => { this.blockedGrid[b * w + a] = 1; used.add(key(a, b)); };
+
+    if (start) { used.add(key(...cellOf(0, 2))); used.add(key(...cellOf(0, 4))); this._buildArrival(r); }
+
+    // rain-streaked windows on outside walls
+    const outside = [r.row === 0, r.row === this.gh - 1, r.col === 0, r.col === this.gw - 1];
+    for (let wall = 0; wall < 4; wall++) {
+      if (!outside[wall]) continue;
+      for (const i of [1, 5]) {
+        if (rng() > 0.6 || used.has(key(...cellOf(wall, i)))) continue;
+        used.add(key(...cellOf(wall, i)));
+        at(wall, i, B => {
+          B.box(M.dark, 1.34, 1.74, 0.06, 0, 1.75, -0.98); B.quad(this.winMat, 1.2, 1.6, 0, 1.75, -0.94); B.box(M.dark, 1.5, 0.08, 0.2, 0, 0.9, -0.92);
+          B.box(this.fab, 0.34, 1.95, 0.08, -0.72, 1.7, -0.9); B.box(this.fab, 0.34, 1.95, 0.08, 0.72, 1.7, -0.9); B.cyl(M.brass, 0.025, 0.025, 1.9, 0, 2.7, -0.9, 4, 0, Math.PI / 2);
+        });
+      }
     }
-    prop(new THREE.BoxGeometry(0.9, 0.7, 0.06), M.darkWood, cx, 1.9, r.z0 * CELL + 0.12);   // picture
 
-    if (r.id === this.startRoom) this._buildArrival(cx, cz);
-    else if (stairs) this._buildStairs(cx, cz);
+    // furniture along the walls; each piece blocks its cell
+    const slots = []; for (let wall = 0; wall < 4; wall++) for (const i of [0, 1, 2, 4, 5, 6]) slots.push([wall, i]);
+    for (let i = slots.length - 1; i > 0; i--) { const j = (rng() * (i + 1)) | 0; [slots[i], slots[j]] = [slots[j], slots[i]]; }
+    const kinds = ['wardrobe', 'dresser', 'bookshelf', 'bed', 'sofa', 'desk', 'armchair', 'luggage', 'clock', 'plant', 'crates', 'bed', 'armchair'];
+    let want = 4 + ((rng() * 4) | 0), beds = 0;
+    for (const [wall, i] of slots) {
+      if (want <= 0) break;
+      const [a, b] = cellOf(wall, i); if (used.has(key(a, b))) continue;
+      let kind = kinds[(rng() * kinds.length) | 0];
+      if (kind === 'bed' && beds) kind = 'dresser';
+      if (kind === 'bed' || kind === 'sofa') {
+        const j = i + NEXT[wall]; if (j < 0 || j > 6 || j === 3) continue;
+        const [a2, b2] = cellOf(wall, j); if (used.has(key(a2, b2))) continue;
+        block(a2, b2); if (kind === 'bed') beds++;
+      }
+      block(a, b); want--;
+      at(wall, i, B => (kind === 'armchair' || kind === 'sofa') ? furn[kind](B, M, this.fab) : furn[kind](B, M), S);
+    }
+    // pictures on a couple of the bare stretches of wall
+    let pics = 1 + ((rng() * 3) | 0);
+    for (const [wall, i] of slots) { if (pics <= 0) break; const k = key(...cellOf(wall, i)); if (used.has(k) || i === 0 || i === 6) continue; used.add(k); pics--; at(wall, i, B => furn.painting(B, M, (rng() * 3) | 0)); }
+    // old stains
+    if (!start && rng() < 0.45) D.add(this.stainMat, new THREE.PlaneGeometry(2.6, 2.6), cx + (rng() - 0.5) * 5, 0.03, cz + (rng() - 0.5) * 5, rng() * 6.3, -Math.PI / 2);
+
+    if (stairs) this._buildStairs(cx, cz);
     else if (r.feature) this._buildFeature(r);
   }
 
-  _buildArrival(cx, cz) {
-    const scene = this.scene;
-    const car = new THREE.Mesh(new THREE.BoxGeometry(2.2, WALL_H - 0.2, 0.4), this._mats.ironMat);
-    car.position.set(cx, (WALL_H - 0.2) / 2, cz - CELL * 2.4); scene.add(car);
-    const light = new THREE.PointLight(0xa8c8ff, 6, 8, 2); light.position.set(cx, 2.4, cz - CELL * 2.1); scene.add(light);
-    const label = labelSprite(['FLOOR ' + this.floor], '#a8c8ff'); label.position.set(cx, 2.7, cz - CELL * 2.1); scene.add(label);
+  _buildArrival(r) {
+    const D = this.D, M = this.M, [x, z] = this.center(r.x0 + MID, r.z0);
+    D.push(x, 0, z, 0);
+    D.quad(mapped(elevatorTex()), 1.9, 2.5, 0, 1.25, -0.96);
+    D.box(M.brass, 0.14, 2.64, 0.12, -1.0, 1.32, -0.95); D.box(M.brass, 0.14, 2.64, 0.12, 1.0, 1.32, -0.95); D.box(M.brass, 2.14, 0.16, 0.12, 0, 2.6, -0.95);
+    D.add(new THREE.MeshLambertMaterial({ map: plaqueTex('FLOOR ' + this.floor) }), new THREE.PlaneGeometry(1.1, 0.28), 0, 2.92, -0.96);
+    D.box(M.brass, 0.14, 0.26, 0.04, 1.35, 1.3, -0.97); D.box(glow(0xffb040), 0.05, 0.05, 0.03, 1.35, 1.35, -0.94);
+    D.pop();
   }
 
+  _blockCentre(x, z) { this.blockedGrid[Math.floor(z / CELL) * this.w + Math.floor(x / CELL)] = 1; }
+
   _buildStairs(cx, cz) {
-    const scene = this.scene;
-    for (let i = 0; i < 5; i++) { const s = new THREE.Mesh(new THREE.BoxGeometry(CELL * 2, 0.24, 0.5), this._mats.darkWood); s.position.set(cx, 0.12, cz + CELL + i * 0.5); scene.add(s); }
-    const mouth = new THREE.Mesh(new THREE.PlaneGeometry(CELL * 2, 1.6), new THREE.MeshBasicMaterial({ color: 0x000000 })); mouth.position.set(cx, 0.9, cz + CELL * 1.9); scene.add(mouth);
-    const label = labelSprite(['STAIRS DOWN', 'FLOOR ' + (this.floor + 1)], '#9fd8ff'); label.position.set(cx, 2.6, cz + CELL); scene.add(label);
-    this.interactables.push({ type: 'stairs', x: cx, z: cz + CELL * 1.3 });
+    const scene = this.scene, D = this.D, M = this.M;
+    this._blockCentre(cx, cz);
+    D.plane(new THREE.MeshBasicMaterial({ map: stairTex() }), 1.9, 1.9, cx, 0.03, cz);
+    for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { D.box(M.dark, 0.12, 1.1, 0.12, cx + dx * 0.97, 0.55, cz + dz * 0.97); D.box(M.brass, 0.16, 0.06, 0.16, cx + dx * 0.97, 1.13, cz + dz * 0.97); }
+    for (const y of [0.55, 1.0]) { D.box(M.dark, 0.06, 0.08, 1.94, cx - 0.97, y, cz); D.box(M.dark, 0.06, 0.08, 1.94, cx + 0.97, y, cz); D.box(M.dark, 1.94, 0.08, 0.06, cx, y, cz + 0.97); }
+    const signMat = new THREE.MeshBasicMaterial({ map: plaqueTex('EXIT', '#0a3a1a', '#7dffa8'), side: THREE.DoubleSide });
+    D.add(signMat, new THREE.PlaneGeometry(1.1, 0.38), cx, 2.5, cz - 0.6); D.add(signMat, new THREE.PlaneGeometry(1.1, 0.38), cx - 0.6, 2.5, cz, Math.PI / 2);
+    D.cyl(M.iron, 0.015, 0.015, 0.7, cx, WALL_H - 0.35, cz - 0.6, 4);
+    const label = sprite(['STAIRS', 'TO FLOOR ' + (this.floor + 1)], '#7dffa8', 1.9); label.position.set(cx, 1.8, cz); scene.add(label);
+    this.interactables.push({ type: 'stairs', x: cx, z: cz });
   }
 
   _buildFeature(r) {
     const f = r.feature, cx = r.cx, cz = r.cz;
+    this._blockCentre(cx, cz);
     if (f.type === 'wallbuy') this._buildRack(cx, cz, f.weapon);
     else if (f.type === 'box') this._buildMystery(cx, cz);
     else if (f.type === 'perk') this._buildShrine(cx, cz, f.perk);
@@ -260,71 +287,93 @@ export class World {
   }
 
   _buildRack(x, z, weapon) {
-    const scene = this.scene, w = WEAPONS[weapon], M = this._mats;
-    const g = new THREE.Group(); g.position.set(x, 0, z);
-    const post = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.9, 0.5), M.woodMat); post.position.y = 0.95; g.add(post);
-    const model = buildWeaponModel(weapon); model.scale.setScalar(1.7); model.rotation.y = Math.PI / 2; model.position.set(0, 1.25, 0); g.add(model);
-    const label = labelSprite([w.name.toUpperCase(), w.cost + ' pts']); label.position.y = 2.6; g.add(label);
-    const light = new THREE.PointLight(0xffd68a, 5, 6, 2); light.position.y = 2.2; g.add(light);
-    scene.add(g);
-    this.interactables.push({ type: 'wallbuy', weapon, cost: w.cost, x, z });
+    const scene = this.scene, wd = WEAPONS[weapon], M = this.M, S = this.S;
+    S.box(M.wood, 1.6, 0.1, 1.0, x, 0.85, z); S.box(M.green, 1.46, 0.03, 0.86, x, 0.91, z); S.box(M.dark, 1.5, 0.16, 0.9, x, 0.74, z);
+    for (const dx of [-0.7, 0.7]) for (const dz of [-0.4, 0.4]) S.box(M.dark, 0.1, 0.8, 0.1, x + dx, 0.4, z + dz);
+    S.box(M.olive, 0.3, 0.14, 0.2, x + 0.5, 0.99, z + 0.25, 0.4); S.box(M.brass, 0.5, 0.02, 0.12, x - 0.4, 0.93, z - 0.3, 0.2);
+    const model = buildWeaponModel(weapon); model.scale.setScalar(1.6); model.position.set(x, 1.45, z); scene.add(model);
+    this.animated.push(t => { model.rotation.y = t * 0.9; });
+    const label = sprite([wd.name.toUpperCase(), wd.cost + ' pts'], '#d8c38a', 1.9); label.position.set(x, 2.35, z); scene.add(label);
+    this.interactables.push({ type: 'wallbuy', weapon, cost: wd.cost, x, z });
   }
 
   _buildMystery(x, z) {
-    const scene = this.scene, M = this._mats;
-    const g = new THREE.Group(); g.position.set(x, 0, z);
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.3, 1.7), M.woodMat); body.position.y = 0.65;
+    const scene = this.scene, M = this.M, S = this.S;
+    S.box(M.wood, 1.6, 0.8, 1.0, x, 0.4, z); S.box(M.dark, 1.66, 0.26, 1.06, x, 0.96, z);
+    for (const dx of [-0.6, 0, 0.6]) S.box(M.brass, 0.1, 1.12, 1.08, x + dx, 0.56, z);
+    S.box(M.brass, 0.2, 0.22, 0.06, x, 0.72, z + 0.52); S.box(M.brass, 0.2, 0.22, 0.06, x, 0.72, z - 0.52);
     const glowMat = new THREE.MeshBasicMaterial({ color: 0xb44cff });
-    const glow = new THREE.Mesh(new THREE.BoxGeometry(1.76, 0.1, 1.76), glowMat); glow.position.y = 1.32;
-    g.add(body, glow);
-    const label = labelSprite(['MYSTERY BOX', BOX_COST + ' pts'], '#c77dff'); label.position.y = 2.9; g.add(label);
-    const display = new THREE.Group(); display.position.y = 2.1; g.add(display);
-    const light = new THREE.PointLight(0xb44cff, 12, 9, 1.8); light.position.y = 2.2; g.add(light);
-    scene.add(g);
+    const seam = new THREE.Mesh(new THREE.BoxGeometry(1.68, 0.05, 1.08), glowMat); seam.position.set(x, 0.82, z); scene.add(seam);
+    const display = new THREE.Group(); display.position.set(x, 1.75, z); scene.add(display);
+    const label = sprite(['MYSTERY BOX', BOX_COST + ' pts'], '#c77dff', 1.9); label.position.set(x, 2.7, z); scene.add(label);
+    const light = new THREE.PointLight(0xb44cff, 7, 7, 1.8); light.position.set(x, 1.6, z); scene.add(light);
     this.mystery = { x, z, display, glowMat, light };
     this.animated.push(t => { glowMat.color.setHex(Math.sin(t * 5) > 0 ? 0xb44cff : 0x7a2fd0); display.rotation.y = t * 1.6; });
     this.interactables.push({ type: 'box', x, z });
   }
 
   _buildShrine(x, z, perk) {
-    const scene = this.scene, M = this._mats;
-    const g = new THREE.Group(); g.position.set(x, 0, z);
-    const mat = new THREE.MeshBasicMaterial({ color: perk.color });
-    const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.3, 0.8), M.darkWood); pillar.position.y = 0.65;
-    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.34), mat); gem.position.y = 1.6; g.add(pillar, gem);
-    const label = labelSprite([perk.name.toUpperCase(), perk.cost + ' pts'], '#' + perk.color.toString(16).padStart(6, '0')); label.position.y = 2.5; g.add(label);
-    const light = new THREE.PointLight(perk.color, 5, 6, 2); light.position.y = 1.8; g.add(light);
-    scene.add(g);
-    this.animated.push(t => { gem.rotation.y = t * 1.5; gem.position.y = 1.6 + Math.sin(t * 2 + x) * 0.08; });
+    const scene = this.scene, M = this.M, S = this.S, D = this.D, g = glow(perk.color);
+    S.box(M.dark, 1.0, 1.95, 0.8, x, 0.975, z); S.box(M.wood, 1.1, 0.12, 0.9, x, 2.0, z); S.box(M.wood, 1.1, 0.14, 0.9, x, 0.07, z);
+    for (const s of [-1, 1]) {
+      D.box(g, 0.72, 0.5, 0.02, x, 1.5, z + s * 0.41); D.box(M.black, 0.5, 0.3, 0.02, x, 0.8, z + s * 0.41);
+      D.box(M.brass, 0.1, 0.16, 0.03, x + 0.3, 1.1, z + s * 0.41); D.box(M.brass, 0.8, 0.04, 0.03, x, 1.2, z + s * 0.41); D.box(M.brass, 0.8, 0.04, 0.03, x, 1.8, z + s * 0.41);
+    }
+    const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.11, 0.36, 6), g); bottle.position.set(x, 2.26, z); scene.add(bottle);
+    this.animated.push(t => { bottle.rotation.y = t * 1.5; bottle.position.y = 2.28 + Math.sin(t * 2 + x) * 0.04; });
+    const label = sprite([perk.name.toUpperCase(), perk.cost + ' pts'], '#' + perk.color.toString(16).padStart(6, '0'), 1.9); label.position.set(x, 2.85, z); scene.add(label);
     this.interactables.push({ type: 'perk', perk, x, z });
   }
 
   _buildAmmo(x, z) {
-    const scene = this.scene;
-    const crate = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.8, 1.0), this._L({ color: 0x3f3a2a })); crate.position.set(x, 0.4, z); scene.add(crate);
-    const label = labelSprite(['AMMO', AMMO_COST + ' pts'], '#9fdc6a'); label.position.set(x, 1.6, z); scene.add(label);
+    const scene = this.scene, M = this.M, S = this.S, D = this.D;
+    S.box(M.olive, 1.4, 0.6, 0.9, x, 0.3, z); S.box(M.olive, 1.44, 0.12, 0.94, x, 0.66, z); S.box(M.olive, 0.6, 0.3, 0.4, x - 0.25, 0.87, z, 0.3);
+    for (const dx of [-0.45, 0.45]) { D.box(M.brass, 0.1, 0.14, 0.03, x + dx, 0.56, z + 0.46); D.box(M.brass, 0.1, 0.14, 0.03, x + dx, 0.56, z - 0.46); }
+    for (let k = 0; k < 5; k++) D.cyl(M.brass, 0.03, 0.035, 0.16, x + 0.3 + (k % 3) * 0.09, 0.8, z - 0.1 + ((k / 3) | 0) * 0.12, 5);
+    const label = sprite(['AMMO', AMMO_COST + ' pts'], '#9fdc6a', 1.9); label.position.set(x, 1.75, z); scene.add(label);
     this.interactables.push({ type: 'ammo', x, z });
   }
 
+  // A real door: jambs and a header fill the 2m gap, and a panelled leaf swings on its hinge.
   _buildDoor(d) {
-    const [x, z] = this.center(d.cx, d.cz);
-    const g = new THREE.Group(); g.position.set(x, 0, z);
-    const slab = new THREE.Mesh(new THREE.BoxGeometry(CELL * 0.96, WALL_H, CELL * 0.5), new THREE.MeshLambertMaterial({ map: this._doorTex(d) }));
-    slab.position.y = WALL_H / 2;
-    if (d.vertical) g.rotation.y = Math.PI / 2;
-    g.add(slab);
-    d.labelSprite = labelSprite([String(d.number), d.locked ? 'LOCKED' : ''], d.locked ? '#ff6a6a' : '#d8c38a', 0.9);
-    d.labelSprite.position.y = WALL_H + 0.35; g.add(d.labelSprite);
+    const M = this.M, S = this.S, D = this.D, [x, z] = this.center(d.cx, d.cz), ry = d.vertical ? Math.PI / 2 : 0;
+    const LEAF_W = 1.5, LEAF_H = 2.3;
+    S.push(x, 0, z, ry);
+    S.box(M.wood, 0.25, LEAF_H + 0.05, 2.1, -0.875, (LEAF_H + 0.05) / 2, 0); S.box(M.wood, 0.25, LEAF_H + 0.05, 2.1, 0.875, (LEAF_H + 0.05) / 2, 0);
+    S.box(M.wood, 2.0, WALL_H - LEAF_H - 0.05, 2.0, 0, (WALL_H + LEAF_H + 0.05) / 2, 0); S.box(M.dark, 2.0, 0.14, 2.12, 0, LEAF_H + 0.12, 0);
+    S.pop();
+    d.plateMat = new THREE.MeshLambertMaterial({ map: numberTex(d.number, d.locked), emissive: 0x2a2010 });
+    D.push(x, 0, z, ry);
+    D.add(d.plateMat, new THREE.PlaneGeometry(0.66, 0.38), 0, 2.84, 1.02); D.add(d.plateMat, new THREE.PlaneGeometry(0.66, 0.38), 0, 2.84, -1.02, Math.PI);
+    D.pop();
+
+    const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry;
+    const hinge = new THREE.Group(); hinge.position.set(-LEAF_W / 2, 0, 0); g.add(hinge);
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(LEAF_W, LEAF_H, 0.09), M.door); leaf.position.set(LEAF_W / 2, LEAF_H / 2, 0); hinge.add(leaf);
+    for (const s of [-1, 1]) { const knob = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.09), M.brass); knob.position.set(LEAF_W - 0.16, 1.05, s * 0.09); hinge.add(knob); }
+    if (d.locked) {
+      d.lockParts = new THREE.Group(); hinge.add(d.lockParts);
+      for (const s of [-1, 1]) {
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(LEAF_W + 0.1, 0.12, 0.05), M.iron); bar.position.set(LEAF_W / 2, 1.3, s * 0.08);
+        const lock = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.26, 0.08), flat(0x8a1c1c)); lock.position.set(LEAF_W / 2, 1.14, s * 0.11);
+        d.lockParts.add(bar, lock);
+      }
+    }
     this.scene.add(g); g.updateMatrixWorld(true);
-    d.group = g; d.slab = slab;
-    this.solids.push(slab);
+    d.group = g; d.hinge = hinge; d.slab = leaf; d.swing = 0;
+    this.solids.push(leaf);
   }
 
-  openDoor(d) {
+  // Swings away from whoever opened it (px, pz = their position).
+  openDoor(d, px, pz) {
     if (d.open) return false;
     d.open = true;
     this.blockedGrid[d.cz * this.w + d.cx] = 0;
     const i = this.solids.indexOf(d.slab); if (i >= 0) this.solids.splice(i, 1);
+    const [x, z] = this.center(d.cx, d.cz), side = px === undefined ? -1 : (d.vertical ? px - x : pz - z);
+    d.swing = side > 0 ? Math.PI * 0.52 : -Math.PI * 0.52;
+    if (d.lockParts) d.lockParts.visible = false;
+    if (d.locked) { d.locked = false; d.plateMat.map = numberTex(d.number, false); d.plateMat.needsUpdate = true; }
     return true;
   }
 
@@ -333,43 +382,10 @@ export class World {
     for (const fn of this.animated) fn(time);
     const dt = Math.min(Math.max(time - (this._lastT ?? time), 0), 0.2); this._lastT = time;
     for (const d of this.doors) {
-      if (!d.open) continue;
-      if (d.slab.position.y > -WALL_H / 2) d.slab.position.y -= dt * 2.4;
-      d.group.visible = d.slab.position.y > -WALL_H / 2;
+      if (!d.open || d.hinge.rotation.y === d.swing) continue;
+      const step = dt * 4.5, diff = d.swing - d.hinge.rotation.y;
+      d.hinge.rotation.y = Math.abs(diff) <= step ? d.swing : d.hinge.rotation.y + Math.sign(diff) * step;
     }
-  }
-
-  // ---- textures ----
-  _wallpaper() {
-    return canvasTexture(128, 256, (g, w, h) => {
-      g.fillStyle = '#2a2018'; g.fillRect(0, 0, w, h);
-      for (let x = 0; x < w; x += 16) { g.fillStyle = (x / 16) % 2 ? '#352619' : '#2e2116'; g.fillRect(x, 0, 16, h); }
-      g.fillStyle = 'rgba(150,120,70,0.14)';
-      for (let y = 14; y < h; y += 40) for (let x = 8; x < w; x += 32) { g.beginPath(); g.moveTo(x, y - 6); g.lineTo(x + 6, y); g.lineTo(x, y + 6); g.lineTo(x - 6, y); g.fill(); }
-      g.fillStyle = '#20150d'; g.fillRect(0, h * 0.7, w, h * 0.3);
-      g.fillStyle = '#3a2817'; g.fillRect(0, h * 0.69, w, 6);
-      speckle(g, w, h, 160, ['rgba(0,0,0,0.3)', 'rgba(60,40,10,0.3)', 'rgba(20,30,10,0.25)'], 2, 9);
-      const grad = g.createLinearGradient(0, 0, 0, h); grad.addColorStop(0, 'rgba(0,0,0,0.5)'); grad.addColorStop(0.3, 'rgba(0,0,0,0)'); grad.addColorStop(1, 'rgba(0,0,0,0.45)');
-      g.fillStyle = grad; g.fillRect(0, 0, w, h);
-    });
-  }
-  _floorTex() {
-    return canvasTexture(128, 128, (g, w, h) => {
-      g.fillStyle = '#3a2a1a'; g.fillRect(0, 0, w, h);
-      for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? '#3d2c1a' : '#45321e'; g.fillRect(i * 16, 0, 15, h); }
-      g.strokeStyle = 'rgba(0,0,0,0.4)'; g.lineWidth = 1; for (let i = 0; i <= 8; i++) { g.beginPath(); g.moveTo(i * 16, 0); g.lineTo(i * 16, h); g.stroke(); }
-      speckle(g, w, h, 120, ['rgba(0,0,0,0.3)', 'rgba(120,20,20,0.12)'], 2, 7);
-    });
-  }
-  _ceilTex() { return canvasTexture(64, 64, (g, w, h) => { g.fillStyle = '#17110c'; g.fillRect(0, 0, w, h); g.strokeStyle = '#241a12'; g.lineWidth = 4; g.strokeRect(2, 2, w - 4, h - 4); speckle(g, w, h, 40, ['rgba(0,0,0,0.4)'], 2, 6); }); }
-  _woodTex() { return canvasTexture(64, 64, (g, w, h) => { for (let i = 0; i < 4; i++) { g.fillStyle = ['#4a3220', '#3d2a1a', '#523926', '#38271a'][i]; g.fillRect(i * 16, 0, 16, h); } g.strokeStyle = '#241509'; g.lineWidth = 3; g.strokeRect(2, 2, w - 4, h - 4); }); }
-  _doorTex(d) {
-    return canvasTexture(96, 160, (g, w, h) => {
-      g.fillStyle = '#3a2615'; g.fillRect(0, 0, w, h);
-      g.fillStyle = '#2e1d10'; g.fillRect(10, 12, w - 20, 60); g.fillRect(10, 86, w - 20, 60);
-      g.fillStyle = d.locked ? '#7a1a1a' : '#b9992f'; g.fillRect(w - 26, h / 2 - 8, 14, 16);
-      speckle(g, w, h, 60, ['rgba(0,0,0,0.3)', 'rgba(120,90,40,0.1)'], 2, 7);
-    });
   }
 
   // ---- collision + flow ----

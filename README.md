@@ -48,6 +48,7 @@ Then open http://localhost:8000.
 - `index.html`, `css/style.css` — page, menus, HUD, death and elevator screens
 - `js/main.js` — game loop, state flow (lobby → elevator → hotel → death)
 - `js/lobby.js` — the rainy exterior and cozy hall
+- `js/build.js` — shared art kit: textures, furniture, and the geometry batcher used by the lobby and hotel
 - `js/world.js` — the procedural hotel generator, collision and enemy pathing
 - `js/player.js`, `js/weapons.js`, `js/zombies.js` — player, guns/knife, enemies
 - `js/gore.js`, `js/psx.js` — blood/gibs and the PSX render pass
