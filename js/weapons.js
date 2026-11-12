@@ -300,7 +300,7 @@ export class WeaponSystem {
       const pt = new THREE.Vector3(z.x, Math.min(z.neckY, 1.5), z.z).addScaledVector(fwd, -z.def.radius);
       game.onZombieHit(z, heavy ? def.heavyDamage : def.damage, false, 1, pt, fwd, { melee: true, slice: true });
     }
-    if (targets.length) game.player.shake = 0.02;
+    if (targets.length) { game.player.shake = 0.02; game.audio.stab(); }
   }
 
   // Quick shove with the gun.

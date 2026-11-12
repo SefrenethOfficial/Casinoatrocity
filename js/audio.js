@@ -10,7 +10,8 @@ const SHOTS = {
   sniper:   { rate: 0.52, vol: 1.0,  dur: 0.5,  freq: 1100, q: 0.5, gain: 0.85, thump: 90,  thumpGain: 1.0, boom: true },
   revolver: { rate: 0.7,  vol: 1.0,  dur: 0.42, freq: 1300, q: 0.6, gain: 0.8,  thump: 110, thumpGain: 0.95, boom: true },
 };
-const SAMPLES = { shot: 'assets/sfx/shot.mp3', click: 'assets/sfx/click.mp3', upgrade: 'assets/sfx/upgrade.mp3', door: 'assets/sfx/door.mp3' };
+const SAMPLES = { shot: 'assets/sfx/shot.mp3', click: 'assets/sfx/click.mp3', upgrade: 'assets/sfx/upgrade.mp3', door: 'assets/sfx/door.mp3',
+  swing: 'assets/sfx/swing.mp3', stab: 'assets/sfx/stab.mp3', splat: 'assets/sfx/splat.mp3', reload: 'assets/sfx/reload.mp3', gib: 'assets/sfx/gib.mp3' };
 const SHOT_LEAD_IN = 0.06;   // the gunshot recording starts with a short silence
 
 export class AudioSys {
@@ -114,14 +115,17 @@ export class AudioSys {
     this._tone('sine', s.thump, s.thump * 0.35, s.dur * 0.8, s.thumpGain);
   }
   empty() { this._tone('square', 900, 700, 0.04, 0.12); }
-  reloadStart() { this._noise(0.06, 'bandpass', 2600, 4, 0.25); this._tone('square', 300, 200, 0.05, 0.1, 0.05); }
-  reloadEnd() { this._noise(0.05, 'bandpass', 3200, 5, 0.3); this._tone('square', 500, 350, 0.05, 0.12, 0.04); }
+  reloadStart() { if (this._sample('reload', 0.95 + Math.random() * 0.1, 0.8, 0.04)) { this._reloadSampled = true; return; } this._reloadSampled = false; this._noise(0.06, 'bandpass', 2600, 4, 0.25); this._tone('square', 300, 200, 0.05, 0.1, 0.05); }
+  reloadEnd() { if (this._reloadSampled) return; this._noise(0.05, 'bandpass', 3200, 5, 0.3); this._tone('square', 500, 350, 0.05, 0.12, 0.04); }
   swap() { this._noise(0.09, 'bandpass', 1400, 2, 0.15); }
   hit() { this._tone('square', 1500, 1200, 0.035, 0.1); }
   headshot() { this._tone('square', 2200, 1600, 0.06, 0.16); this._tone('sine', 880, 440, 0.12, 0.2); }
   kill() { this._tone('triangle', 520, 780, 0.09, 0.16); }
-  slash() { this._noise(0.1, 'highpass', 2600, 0.8, 0.22, 0, 900); }
+  // knife through flesh
+  stab() { this._sample('stab', 0.95 + Math.random() * 0.15, 0.85, 0.1); }
+  slash() { if (this._sample('swing', 0.9 + Math.random() * 0.25, 0.8, 0.07)) return; this._noise(0.1, 'highpass', 2600, 0.8, 0.22, 0, 900); }
   gore(big = false) {
+    if (this._sample(big ? 'gib' : 'splat', 0.9 + Math.random() * 0.2, big ? 0.9 : 0.75, big ? 0.06 : 0.04)) return;
     this._noise(big ? 0.3 : 0.16, 'lowpass', big ? 700 : 900, 1.2, big ? 0.6 : 0.35, 0, 160);
     this._tone('sine', big ? 110 : 150, 50, big ? 0.28 : 0.14, big ? 0.5 : 0.25);
     if (big) this._noise(0.22, 'bandpass', 1700, 2, 0.2, 0.05, 500);
@@ -145,7 +149,7 @@ export class AudioSys {
     this._tone('sawtooth', 620, 300, 0.35, 0.12);
     this._noise(0.3, 'bandpass', 2200, 4, 0.14, 0, 900);
   }
-  melee() { this._noise(0.12, 'bandpass', 900, 1.2, 0.3, 0, 300); }
+  melee() { this._sample('swing', 0.7, 0.7, 0.07); this._noise(0.12, 'bandpass', 900, 1.2, 0.3, 0, 300); }
   hurt() { this._tone('sawtooth', 160, 70, 0.25, 0.4); this._noise(0.12, 'lowpass', 500, 1, 0.5); }
   step() { this._noise(0.05, 'lowpass', 260, 1, 0.07); }
   jump() { this._noise(0.08, 'lowpass', 400, 1, 0.1); }
