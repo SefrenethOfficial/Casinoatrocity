@@ -612,9 +612,9 @@ class Game {
     const count = Math.min(3 + Math.floor(this.difficulty() * 0.6), 14);
     this.zombies.spawnRoom(this.world.roomSpawns(room), count, this.difficulty());
     this.dropsThisRoom = 0;
-    // every few rooms there is a chance the face comes through
+    // on floor 4 only, every few rooms there is a chance the face comes through
     this.sinceFace++;
-    if (!this.face && this.sinceFace >= 3 && room !== this.world.stairsRoom && Math.random() < 0.35) this._startFace();
+    if (!this.face && this.floor === 4 && this.sinceFace >= 3 && room !== this.world.stairsRoom && Math.random() < 0.35) this._startFace();
   }
   // One steady ramp for the whole run: every room you enter is a little harder than the last.
   difficulty() { return Math.max(this.depth, (this.floor - 1) * 6 + 1); }
