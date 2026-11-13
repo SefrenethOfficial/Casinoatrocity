@@ -145,6 +145,7 @@ class Game {
     if (this.face && this.music.cur === 'face') this.music.stop();
     this.face = null; this.sinceFace = 0; this.hidden = null;
     $('hide').classList.add('hidden');
+    $('face-warn').classList.remove('on'); $('face-warn').style.opacity = 0;
   }
 
   // Lights stutter, the song kicks in, and a few seconds later it comes down the corridor.
@@ -152,7 +153,9 @@ class Game {
     this.sinceFace = 0;
     this.face = { phase: 'warn', t: 0, sprite: null, route: null, seg: 0, pos: new THREE.Vector3() };
     this.world.flicker = true;
-    this.music.play('face', { loop: false });
+    this.music.play('face', { loop: true });
+    this.music.faceVolume(0);
+    $('face-warn').classList.add('on'); $('face-warn').style.opacity = 0;
   }
 
   _faceRoute() {
@@ -169,6 +172,9 @@ class Game {
     const f = this.face; if (!f) return;
     f.t += dt;
     if (f.phase === 'warn') {
+      const k = Math.min(f.t / 6, 1), pulse = 0.5 + 0.5 * Math.sin(f.t * (4 + k * 12));
+      $('face-warn').style.opacity = (0.1 + k * 0.55 * (0.55 + 0.45 * pulse)).toFixed(3);
+      this.music.faceVolume(0.1 + k * 0.28);
       if (f.t < 6) return;
       if (!this.faceTex) { this.faceTex = new THREE.TextureLoader().load('assets/img/face.webp'); this.faceTex.colorSpace = THREE.SRGBColorSpace; }
       f.route = this._faceRoute(); f.seg = 0; f.pos.copy(f.route[0]);
@@ -186,9 +192,10 @@ class Game {
         const to = f.route[f.seg + 1], d = f.pos.distanceTo(to);
         if (d <= move) { f.pos.copy(to); f.seg++; move -= d; } else { f.pos.addScaledVector(V.copy(to).sub(f.pos).normalize(), move); move = 0; }
       }
-      f.sprite.position.set(f.pos.x, 1.7 + Math.sin(f.t * 30) * 0.15, f.pos.z);
-      f.sprite.material.rotation = Math.sin(f.t * 18) * 0.35;
-      const s = 3.4 + Math.sin(f.t * 40) * 0.4; f.sprite.scale.set(s, s, 1);
+      f.sprite.position.set(f.pos.x, 1.7, f.pos.z);
+      const pp = this.player.pos, dist = Math.hypot(pp.x - f.pos.x, pp.z - f.pos.z);
+      this.music.faceVolume(Math.max(0.12, Math.min(1, 1 - (dist - 3) / 22)));   // louder the closer it gets
+      $('face-warn').style.opacity = Math.max(0, Math.min(0.85, 1 - (dist - 2) / 15)).toFixed(3);
       // everything it passes dies
       for (const z of this.zombies.zombies) {
         if (z.dead || Math.hypot(z.x - f.pos.x, z.z - f.pos.z) > 9) continue;
@@ -203,7 +210,7 @@ class Game {
       if (f.seg >= f.route.length - 1) { this.scene.remove(f.sprite); f.sprite = null; f.phase = 'out'; f.t = 0; }
       return;
     }
-    if (f.t > 1.2) { this.world.flicker = false; if (this.music.cur === 'face') this.music.stop(); this.face = null; }
+    if (f.t > 1.2) { this.world.flicker = false; if (this.music.cur === 'face') this.music.stop(); this.face = null; $('face-warn').classList.remove('on'); $('face-warn').style.opacity = 0; }
   }
 
   _hide(it) {
@@ -612,9 +619,10 @@ class Game {
     const count = Math.min(3 + Math.floor(this.difficulty() * 0.6), 14);
     this.zombies.spawnRoom(this.world.roomSpawns(room), count, this.difficulty());
     this.dropsThisRoom = 0;
-    // on floor 4 only, every few rooms there is a chance the face comes through
+    // every few rooms there is a chance the face comes through
     this.sinceFace++;
-    if (!this.face && this.floor === 4 && this.sinceFace >= 3 && room !== this.world.stairsRoom && Math.random() < 0.35) this._startFace();
+    if (!this.face && this.sinceFace >= 3 && room !== this.world.stairsRoom && Math.random() < 0.35) this._startFace();
+    else if (!this.face && Math.random() < 0.3) this.world.flickerRoom(room, 0.8 + Math.random() * 1.8);   // a harmless flicker, no face behind it
   }
   // One steady ramp for the whole run: every room you enter is a little harder than the last.
   difficulty() { return Math.max(this.depth, (this.floor - 1) * 6 + 1); }

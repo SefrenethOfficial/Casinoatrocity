@@ -321,3 +321,9 @@ kbd:first-child { margin-left: 0; }
 /* Hiding in a wardrobe: dark, with light coming through the door slats. */
 #hide { position: fixed; inset: 0; z-index: 9; pointer-events: none;
   background: linear-gradient(90deg, #030201 0 24%, transparent 24% 49%, #030201 49% 51%, transparent 51% 76%, #030201 76%), repeating-linear-gradient(0deg, #060302 0 30px, transparent 30px 44px); }
+
+/* The face is coming: a red darkness closes in from the edges (JS drives the opacity). */
+#face-warn { position: fixed; inset: 0; z-index: 8; pointer-events: none; opacity: 0;
+  background: radial-gradient(ellipse at 50% 50%, rgba(255,20,20,0) 30%, rgba(150,0,0,0.45) 68%, rgba(70,0,0,0.92) 100%);
+  mix-blend-mode: screen; transition: opacity 0.05s linear; }
+#face-warn.on { display: block; }

@@ -45,6 +45,9 @@ export class Music {
     this.cur = name;
   }
 
+  // The face scream rides its own volume so it can swell as the thing approaches.
+  faceVolume(v) { const a = this.els.face; if (a && this.cur === 'face') a.volume = Math.max(0, Math.min(1, v)) * this.volume; }
+
   stop() {
     if (!this.cur) return;
     const a = this.els[this.cur];

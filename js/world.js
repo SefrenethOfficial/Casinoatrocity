@@ -73,6 +73,7 @@ export class World {
     this.wallGrid = null;  // structural walls + doors only (furniture excluded), for player collision
     this.animated = [];
     this.lamps = [];
+    this.roomFlick = null;   // a lone room flicker (no face)
     this.playerSpawn = new THREE.Vector3();
     this.mystery = null;
     this.time = 0;
@@ -450,6 +451,8 @@ export class World {
     return true;
   }
 
+  flickerRoom(id, dur) { if (!this.flicker && this.lamps[id - 1]) this.roomFlick = { id, t: dur }; }
+
   update(time) {
     this.time = time;
     for (const fn of this.animated) fn(time);
@@ -458,6 +461,11 @@ export class World {
       this._wasFlicker = true;
     } else if (this._wasFlicker) { this._wasFlicker = false; for (const l of this.lamps) if (l) { l.intensity = l.userData.base; l.userData.bulb.visible = true; } }
     const dt = Math.min(Math.max(time - (this._lastT ?? time), 0), 0.2); this._lastT = time;
+    if (this.roomFlick && !this.flicker) {
+      const rf = this.roomFlick, l = this.lamps[rf.id - 1]; rf.t -= dt;
+      if (rf.t <= 0 || !l) { if (l) { l.intensity = l.userData.base; l.userData.bulb.visible = true; } this.roomFlick = null; }
+      else { const on = Math.sin(time * 43 + rf.id) * Math.sin(time * 15) > -0.1; l.intensity = on ? l.userData.base : l.userData.base * 0.06; l.userData.bulb.visible = on; }
+    }
     for (const d of this.doors) {
       if (!d.open || d.hinge.rotation.y === d.swing) continue;
       const step = dt * 4.5, diff = d.swing - d.hinge.rotation.y;
