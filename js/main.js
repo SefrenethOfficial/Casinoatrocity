@@ -6,6 +6,7 @@ import { save, loadSave, writeSave, ownsSkin, addSkin } from './save.js';
 import { AudioSys } from './audio.js';
 import { Music } from './music.js';
 import { World, BOX_COST, AMMO_COST } from './world.js';
+import { ZONES, zoneById } from './zones.js';
 import { Lobby } from './lobby.js';
 import { Player } from './player.js';
 import { WeaponSystem } from './weapons.js';
@@ -85,6 +86,7 @@ class Game {
 
     // persistent-for-the-run loadout
     this.floor = 0;
+    this.zonePlan = {};   // which place each 2-floor block drops you in
     this.hasLight = false;
     this.lockpicks = 0;
     this.visited = new Set();
@@ -120,11 +122,23 @@ class Game {
   }
 
   // Generate a fresh hotel floor and swap into it.
+  // Where the lift drops you. It switches every couple of floors, at random, never twice running.
+  zoneFor(floor) {
+    const block = Math.max(0, Math.floor((Math.max(1, floor) - 1) / 2));
+    if (!this.zonePlan[block]) {
+      const prev = this.zonePlan[block - 1];
+      const pool = ZONES.filter(z => z.id !== prev);
+      this.zonePlan[block] = pool[(Math.random() * pool.length) | 0].id;
+    }
+    return zoneById(this.zonePlan[block]);
+  }
+
   _buildHotel() {
+    const Z = this.zone = this.zoneFor(this.floor);
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0806);
-    scene.fog = new THREE.Fog(0x0a0806, 5, 38);
-    this.world = new World(scene, this.floor);
+    scene.background = new THREE.Color(Z.fog.color);
+    scene.fog = new THREE.Fog(Z.fog.color, Z.fog.near, Z.fog.far);
+    this.world = new World(scene, this.floor, undefined, Z);
     this.scene = scene;
     this.effects = new Effects(scene, this.world);
     this.zombies.reset();
@@ -137,6 +151,8 @@ class Game {
     this.lightOn = this.hasLight;
     this.player.reset(this.world.playerSpawn);
     this.player.yaw = Math.PI;   // face into the room
+    // the backrooms: you clip through and land on your side on the carpet
+    this.fallIn = Z.noclip ? { t: 0 } : null;
   }
 
   // ---------------------------------------------------------------- the face
@@ -242,6 +258,7 @@ class Game {
   // ---------------------------------------------------------------- flow
   enterLobby() {
     clearTimeout(this._elevT); this._arriving = false;
+    this.fallIn = null;
     const car = $('elevator-car'); if (car) car.classList.remove('boarding', 'riding', 'arriving');
     this.audio.unlock();
     this.music.play('lobby');
@@ -276,6 +293,7 @@ class Game {
 
   _syncElevator() {
     $('elev-floor').textContent = 'Floor ' + (this.floor + 1);
+    $('elev-dest').textContent = this.zoneFor(this.floor + 1).name;
     this.cases.refreshChips();
     const fBtn = $('buy-flash'), pBtn = $('buy-picks');
     fBtn.textContent = this.hasLight ? 'Flashlight ✓' : `Buy Flashlight — ${FLASH_COST}`;
@@ -345,6 +363,7 @@ class Game {
     this._clearFace();
     this._commitRun();
     this.floor = 0;
+    this.zonePlan = {};   // a fresh run rolls a fresh set of places
     this.hasLight = false; this.lockpicks = 0;
     this.enterLobby();
   }
@@ -685,6 +704,30 @@ class Game {
   update(dt) {
     this.doubleT = Math.max(0, this.doubleT - dt);
     this.instaT = Math.max(0, this.instaT - dt);
+    if (this.fallIn) {
+      // noclipped out of reality: drop in, land on your side, then pick yourself up
+      const f = this.fallIn; f.t += dt;
+      const p = this.player.pos;
+      if (f.t < 0.95) {
+        const k = f.t / 0.95;
+        this.camera.position.set(p.x, 0.42 + (7.5 - 0.42) * (1 - k) * (1 - k), p.z);
+        this.camera.rotation.set(-0.5 + k * 0.5, this.player.yaw + k * 0.5, k * 1.45);
+      } else if (f.t < 1.45) {
+        if (!f.thud) { f.thud = true; this.audio.gore(false); this.player.shake = 0.5; }
+        this.camera.position.set(p.x, 0.42, p.z);
+        this.camera.rotation.set(0, this.player.yaw + 0.5, 1.45);
+      } else {
+        const k = Math.min((f.t - 1.45) / 0.9, 1), e = 1 - Math.pow(1 - k, 3);
+        this.camera.position.set(p.x, 0.42 + (1.62 - 0.42) * e, p.z);
+        this.camera.rotation.set(0, this.player.yaw + 0.5 * (1 - e), 1.45 * (1 - e));
+        if (k >= 1) this.fallIn = null;
+      }
+      this.zombies.update(dt);
+      this.effects.update(dt);
+      this.world.update(this.time);
+      this.hud.update(dt, this);
+      return;
+    }
     if (this.hidden) {
       // shut in the wardrobe, peering out through the slats
       const h = this.hidden;

@@ -4,7 +4,8 @@
 import * as THREE from 'three';
 import { WEAPONS } from './data.js';
 import { buildWeaponModel } from './models.js';
-import { Batcher, tex, speckle, flat, glow, mapped, sprite, mats, furn, wallpaperTex, ceilingTex, rugTex, numberTex, windowTex, elevatorTex, plaqueTex } from './build.js';
+import { Batcher, tex, speckle, flat, glow, mapped, sprite, mats, furn, numberTex, windowTex, elevatorTex, plaqueTex } from './build.js';
+import { ZONES } from './zones.js';
 
 export const CELL = 2;
 export const WALL_H = 3.3;
@@ -15,14 +16,6 @@ function mulberry(seed) {
   let a = seed >>> 0;
   return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
-
-// Each floor is papered differently.
-const PALETTES = [
-  { paper: '#4f5f47', paper2: '#57684e', motif: 'rgba(214,190,110,0.45)', wood: '#4a2f1b', trim: '#2a190d', fabric: 0x5c1a26, rugs: [['#5a1a22', '#2a1210'], ['#3a2a4a', '#1a1220']] },
-  { paper: '#6a2e30', paper2: '#733436', motif: 'rgba(224,180,100,0.45)', wood: '#3f2816', trim: '#24150b', fabric: 0x23402e, rugs: [['#23402e', '#12180f'], ['#5a1a22', '#2a1210']] },
-  { paper: '#3c4a66', paper2: '#44536f', motif: 'rgba(200,200,220,0.35)', wood: '#46301e', trim: '#26180d', fabric: 0x4a3a1a, rugs: [['#1e2c4a', '#0e1220'], ['#4a3a1a', '#1e160a']] },
-  { paper: '#7a6434', paper2: '#84703c', motif: 'rgba(90,30,30,0.45)', wood: '#402a18', trim: '#22140a', fabric: 0x2a2a4a, rugs: [['#5a1a22', '#2a1210'], ['#2a2a4a', '#12121e']] },
-];
 
 // Tight collider footprints for furniture, in the piece's own local frame: [lx, lz, hw, hd].
 // lx/lz is the box centre offset from the cell centre (pieces sit with their back at z = -1),
@@ -52,9 +45,10 @@ export const BOX_COST = 950;
 export const AMMO_COST = 400;
 
 export class World {
-  constructor(scene, floor = 1, seed = (Math.random() * 1e9) | 0) {
+  constructor(scene, floor = 1, seed = (Math.random() * 1e9) | 0, zone = ZONES[0]) {
     this.scene = scene;
     this.floor = floor;
+    this.Z = this.zone = zone;
     this.seed = seed;
     const rng = this.rng = mulberry(seed + floor * 101);
     this.gw = Math.min(3 + Math.floor(floor / 2), 5);
@@ -185,10 +179,8 @@ export class World {
   _build() {
     const scene = this.scene, M = this.M = mats(), w = this.w;
     const S = this.S = new Batcher(), D = this.D = new Batcher();
-    const pal = this.pal = PALETTES[(this.floor - 1) % PALETTES.length];
-    const paper = mapped(wallpaperTex(pal));
-    this.fab = flat(pal.fabric);
-    this.rugs = pal.rugs.map(c => mapped(rugTex(c[0], c[1])));
+    const Z = this.Z, K = this.kit = Z.mats(this.floor);
+    const paper = K.wall;
     this.winMat = new THREE.MeshBasicMaterial({ map: windowTex() });
     this.stainMat = new THREE.MeshBasicMaterial({ map: stainTex(), transparent: true, depthWrite: false });
     this.animated.push(t => { const f = Math.sin(t * 0.83) * Math.sin(t * 1.37) > 0.93 && Math.sin(t * 40) > -0.2; this.winMat.color.setRGB(f ? 4 : 1, f ? 4 : 1, f ? 4.5 : 1); });
@@ -205,11 +197,11 @@ export class World {
       if (solid(cx + 1, cz)) S.quad(paper, CELL, WALL_H, (cx + 1) * CELL, WALL_H / 2, z, -Math.PI / 2);
     }
     const W = w * CELL, Hh = this.h * CELL;
-    S.plane(M.boards, W, Hh, W / 2, 0, Hh / 2, w, this.h);
-    S.plane(mapped(ceilingTex()), W, Hh, W / 2, WALL_H, Hh / 2, w, this.h, true);
+    S.plane(K.floor, W, Hh, W / 2, 0, Hh / 2, w, this.h);
+    S.plane(K.ceil, W, Hh, W / 2, WALL_H, Hh / 2, w, this.h, true);
 
-    scene.add(new THREE.AmbientLight(0x5a5048, 0.85));
-    scene.add(new THREE.HemisphereLight(0x6a6258, 0x1a120c, 0.5));
+    scene.add(new THREE.AmbientLight(Z.ambient[0], Z.ambient[1]));
+    scene.add(new THREE.HemisphereLight(Z.hemi[0], Z.hemi[1], Z.hemi[2]));
 
     this.wallGrid = this.blockedGrid.slice();   // structural only; furniture is added below as colliders
     for (const r of this.rooms) { if (r.used) this._dressRoom(r); else this.lamps.push(null); }
@@ -222,14 +214,16 @@ export class World {
     const scene = this.scene, M = this.M, D = this.D, S = this.S, rng = this.rng, cx = r.cx, cz = r.cz, w = this.w;
     const stairs = r.id === this.stairsRoom, start = r.id === this.startRoom;
 
-    // rug + hanging lamp
-    if (!stairs) D.plane(this.rugs[r.id % this.rugs.length], r.hall ? 3.4 : 4.8, r.hall ? 3.4 : 4.8, cx, 0.02, cz);
-    const dead = !stairs && !start && rng() < 0.18, flick = !dead && !start && rng() < 0.3;
-    const col = stairs ? 0xd0ffdc : 0xffb86a, base = dead ? 0 : 30;
-    D.cyl(M.iron, 0.02, 0.02, 0.7, cx, WALL_H - 0.35, cz, 4); D.cyl(M.brass, 0.14, 0.14, 0.05, cx, WALL_H - 0.02, cz, 6);
-    D.add(new THREE.MeshLambertMaterial({ color: 0x8a6a3a, side: THREE.DoubleSide, emissive: dead ? 0 : 0x4a3210 }), new THREE.ConeGeometry(0.42, 0.34, 8, 1, true), cx, WALL_H - 0.8, cz);
-    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 6, 4), glow(dead ? 0x2a2620 : 0xffe2a0)); bulb.position.set(cx, WALL_H - 0.92, cz); scene.add(bulb);
-    const lamp = new THREE.PointLight(col, base, 17, 1.4); lamp.position.set(cx, WALL_H - 1.0, cz); scene.add(lamp);
+    // rug (if the zone has them) + the zone's ceiling light
+    const Z = this.Z, K = this.kit, L = Z.lamp;
+    const rugMat = Z.rug ? Z.rug(K, r) : null;
+    if (!stairs && rugMat) D.plane(rugMat, r.hall ? 3.4 : 4.8, r.hall ? 3.4 : 4.8, cx, 0.02, cz);
+    const dead = !stairs && !start && rng() < L.dead, flick = !dead && !start && rng() < L.flick;
+    const col = stairs ? 0xd0ffdc : L.color, base = dead ? 0 : L.base;
+    L.fixture(D, M, cx, cz, WALL_H, dead);
+    const bulbY = WALL_H - (L.bulbY ?? 0.92);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(L.bulbR ?? 0.1, 6, 4), glow(dead ? 0x2a2620 : L.bulb)); bulb.position.set(cx, bulbY, cz); scene.add(bulb);
+    const lamp = new THREE.PointLight(col, base, L.dist ?? 17, 1.4); lamp.position.set(cx, WALL_H - 1.0, cz); scene.add(lamp);
     lamp.userData.base = base; lamp.userData.bulb = bulb;
     this.lamps.push(lamp);
     if (flick) { const seed = r.id * 3.3; this.animated.push(t => { const on = Math.sin(t * 31 + seed) > -0.6 && Math.sin(t * 7 + seed) > -0.85; lamp.intensity = on ? base : base * 0.12; bulb.visible = on; }); }
@@ -245,55 +239,32 @@ export class World {
 
     if (start) { used.add(key(...cellOf(0, 2))); used.add(key(...cellOf(0, 4))); this._buildArrival(r); }
 
-    // rain-streaked windows on outside walls
-    const gone = (dc, dr) => { const c = r.col + dc, rr = r.row + dr; return c < 0 || rr < 0 || c >= this.gw || rr >= this.gh || !this.rooms[rr * this.gw + c].used; };
-    const outside = [gone(0, -1), gone(0, 1), gone(-1, 0), gone(1, 0)];
-    for (let wall = 0; wall < 4; wall++) {
-      if (!outside[wall]) continue;
-      for (const i of [1, 5]) {
-        if (rng() > 0.6 || used.has(key(...cellOf(wall, i)))) continue;
-        used.add(key(...cellOf(wall, i)));
-        at(wall, i, B => {
-          B.box(M.dark, 1.34, 1.74, 0.06, 0, 1.75, -0.98); B.quad(this.winMat, 1.2, 1.6, 0, 1.75, -0.94); B.box(M.dark, 1.5, 0.08, 0.2, 0, 0.9, -0.92);
-          B.box(this.fab, 0.34, 1.95, 0.08, -0.72, 1.7, -0.9); B.box(this.fab, 0.34, 1.95, 0.08, 0.72, 1.7, -0.9); B.cyl(M.brass, 0.025, 0.025, 1.9, 0, 2.7, -0.9, 4, 0, Math.PI / 2);
-        });
-      }
-    }
-
-    // furniture along the walls; each piece blocks its cell
+    // the slot machinery the zone hooks use
     const slots = []; for (let wall = 0; wall < 4; wall++) for (const i of [0, 1, 2, 4, 5, 6]) slots.push([wall, i]);
     for (let i = slots.length - 1; i > 0; i--) { const j = (rng() * (i + 1)) | 0; [slots[i], slots[j]] = [slots[j], slots[i]]; }
-    const kinds = ['wardrobe', 'dresser', 'bookshelf', 'bed', 'sofa', 'desk', 'armchair', 'luggage', 'clock', 'plant', 'crates', 'bed', 'armchair'];
-    let want = 4 + ((rng() * 4) | 0), beds = 0, closets = 0;
+    const api = { W: this, r, S, D, M, K, rng, cellOf, ROT, NEXT, used, key, at, block, slots };
+    if (Z.walls) Z.walls(api);
+
+    // props along the walls; each one blocks its cell and gets a collider
+    const kinds = Z.slots, wide = Z.wide || [], limit = Z.limit || {}, counts = {};
+    let want = Math.max(2, Math.round((4 + ((rng() * 4) | 0)) * (Z.density ?? 1))), closets = 0;
     for (const [wall, i] of slots) {
       if (want <= 0) break;
       const [a, b] = cellOf(wall, i); if (used.has(key(a, b))) continue;
-      let kind = kinds[(rng() * kinds.length) | 0];
-      if (!closets) kind = 'wardrobe';
-      if (kind === 'bed' && beds) kind = 'dresser';
-      if (kind === 'bed' || kind === 'sofa') {
+      let kind = closets ? kinds[(rng() * kinds.length) | 0] : Z.closet;
+      if (limit[kind] && (counts[kind] || 0) >= limit[kind]) { kind = kinds.find(k => !limit[k] || (counts[k] || 0) < limit[k]); if (!kind) break; }
+      if (wide.includes(kind)) {
         const j = i + NEXT[wall]; if (j < 0 || j > 6 || j === 3) continue;
         const [a2, b2] = cellOf(wall, j); if (used.has(key(a2, b2))) continue;
-        block(a2, b2); if (kind === 'bed') beds++;
+        block(a2, b2);
       }
-      block(a, b); want--;
-      if (kind === 'wardrobe') { closets++; const [x, z] = this.center(a, b); this.interactables.push({ type: 'closet', x, z, ry: ROT[wall] }); }
-      at(wall, i, B => (kind === 'armchair' || kind === 'sofa') ? furn[kind](B, M, this.fab) : furn[kind](B, M), S);
-      this._foot(...this.center(a, b), ROT[wall], kind);
+      block(a, b); want--; counts[kind] = (counts[kind] || 0) + 1;
+      if (kind === Z.closet) { closets++; const [x, z] = this.center(a, b); this.interactables.push({ type: 'closet', x, z, ry: ROT[wall] }); }
+      at(wall, i, B => Z.build[kind](B, M, K), S);
+      const f = Z.foot[kind], [fx, fz] = this.center(a, b);
+      if (f) this._obstacle(fx, fz, ROT[wall], f[0], f[1], f[2], f[3]);
     }
-    // the odd cart left standing out in the room
-    for (const [dx, dz] of [[2, 2], [4, 4], [4, 2], [2, 4]]) {
-      if (rng() > 0.22) continue;
-      const a = r.x0 + dx, b = r.z0 + dz, [x, z] = this.center(a, b);
-      this.blockedGrid[b * w + a] = 1;
-      const ry = rng() < 0.5 ? 0 : Math.PI / 2, kind = rng() < 0.5 ? 'trolley' : 'linen';
-      S.push(x, 0, z, ry); furn[kind](S, M); S.pop(); this._foot(x, z, ry, kind);
-    }
-    // pictures on a couple of the bare stretches of wall
-    let pics = 1 + ((rng() * 3) | 0);
-    for (const [wall, i] of slots) { if (pics <= 0) break; const k = key(...cellOf(wall, i)); if (used.has(k) || i === 0 || i === 6) continue; used.add(k); pics--; at(wall, i, B => furn.painting(B, M, (rng() * 3) | 0)); }
-    // old stains
-    if (!start && rng() < 0.45) D.add(this.stainMat, new THREE.PlaneGeometry(2.6, 2.6), cx + (rng() - 0.5) * 5, 0.03, cz + (rng() - 0.5) * 5, rng() * 6.3, -Math.PI / 2);
+    if (Z.room) Z.room(api);
 
     if (stairs) this._buildStairs(cx, cz);
     else if (r.feature) this._buildFeature(r);
@@ -301,7 +272,10 @@ export class World {
 
   // A thin corridor: carts parked along the sides to weave around, and one wardrobe to hide in.
   _dressHall(r) {
-    const S = this.S, D = this.D, M = this.M, rng = this.rng, w = this.w;
+    const S = this.S, D = this.D, M = this.M, rng = this.rng, w = this.w, Z = this.Z, K = this.kit;
+    const narrow = Z.slots.filter(k => !(Z.wide || []).includes(k) && k !== Z.closet);
+    const pick = () => narrow.length ? narrow[(rng() * narrow.length) | 0] : Z.closet;
+    const place = (x, z, ry, kind) => { S.push(x, 0, z, ry); Z.build[kind](S, M, K); S.pop(); const f = Z.foot[kind]; if (f) this._obstacle(x, z, ry, f[0], f[1], f[2], f[3]); };
     let closet = false;
     for (const k of r.dirs) {
       const ns = k === 'N' || k === 'S', outer = (k === 'N' || k === 'W') ? [0, 1] : [6, 5];
@@ -310,17 +284,17 @@ export class World {
         const dx = ns ? side : along, dz = ns ? along : side, a = r.x0 + dx, b = r.z0 + dz, [x, z] = this.center(a, b);
         this.blockedGrid[b * w + a] = 1; fn(x, z, side);
       };
-      put(sideA, outer[p], (x, z) => { const ry = ns ? Math.PI / 2 : 0, kind = rng() < 0.5 ? 'trolley' : 'linen'; S.push(x, 0, z, ry); furn[kind](S, M); S.pop(); this._foot(x, z, ry, kind); });
+      put(sideA, outer[p], (x, z) => place(x, z, ns ? Math.PI / 2 : 0, pick()));
       if (!closet) {
         closet = true;
         put(sideB, outer[1 - p], (x, z, side) => {
           const ry = ns ? (side === 2 ? Math.PI / 2 : -Math.PI / 2) : (side === 2 ? 0 : Math.PI);
-          S.push(x, 0, z, ry); furn.wardrobe(S, M); S.pop(); this._foot(x, z, ry, 'wardrobe');
+          place(x, z, ry, Z.closet);
           this.interactables.push({ type: 'closet', x, z, ry });
         });
-      } else if (rng() < 0.5) put(sideB, outer[1 - p], (x, z, side) => { const ry = ns ? (side === 2 ? Math.PI / 2 : -Math.PI / 2) : (side === 2 ? 0 : Math.PI); S.push(x, 0, z, ry); furn.crates(S, M); S.pop(); this._foot(x, z, ry, 'crates'); });
+      } else if (rng() < 0.5) put(sideB, outer[1 - p], (x, z, side) => place(x, z, ns ? (side === 2 ? Math.PI / 2 : -Math.PI / 2) : (side === 2 ? 0 : Math.PI), pick()));
       // sconces down the corridor walls
-      for (const side of [2, 4]) { const dx = ns ? side : outer[0], dz = ns ? outer[0] : side, [x, z] = this.center(r.x0 + dx, r.z0 + dz); const ry = ns ? (side === 2 ? Math.PI / 2 : -Math.PI / 2) : (side === 2 ? 0 : Math.PI); if (!this.blockedGrid[(r.z0 + dz) * w + r.x0 + dx]) { D.push(x, 0, z, ry); furn.sconce(D, M, 2.3); D.pop(); } }
+      for (const side of [2, 4]) { const dx = ns ? side : outer[0], dz = ns ? outer[0] : side, [x, z] = this.center(r.x0 + dx, r.z0 + dz); const ry = ns ? (side === 2 ? Math.PI / 2 : -Math.PI / 2) : (side === 2 ? 0 : Math.PI); if (Z.id === 'hotel' && !this.blockedGrid[(r.z0 + dz) * w + r.x0 + dx]) { D.push(x, 0, z, ry); furn.sconce(D, M, 2.3); D.pop(); } }
     }
   }
 
@@ -421,7 +395,7 @@ export class World {
 
     const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry;
     const hinge = new THREE.Group(); hinge.position.set(-LEAF_W / 2, 0, 0); g.add(hinge);
-    const leaf = new THREE.Mesh(new THREE.BoxGeometry(LEAF_W, LEAF_H, 0.09), M.door); leaf.position.set(LEAF_W / 2, LEAF_H / 2, 0); hinge.add(leaf);
+    const leaf = new THREE.Mesh(new THREE.BoxGeometry(LEAF_W, LEAF_H, 0.09), this.kit.door || M.door); leaf.position.set(LEAF_W / 2, LEAF_H / 2, 0); hinge.add(leaf);
     for (const s of [-1, 1]) { const knob = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.09), M.brass); knob.position.set(LEAF_W - 0.16, 1.05, s * 0.09); hinge.add(knob); }
     if (d.locked) {
       d.lockParts = new THREE.Group(); hinge.add(d.lockParts);
