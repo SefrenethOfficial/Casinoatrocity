@@ -1,10 +1,10 @@
 // First-person controller: mouse look, walking, sprinting, jumping and health.
 import * as THREE from 'three';
 
-const EYE = 1.66;
+const EYE = 1.66, CROUCH_EYE = 0.95;
 const RADIUS = 0.38;
 // Deliberately slow. The weapon's mobility scales these; only the knife (1.75x) makes you quick.
-const WALK = 3.0, SPRINT = 4.3, ADS_WALK = 1.8;
+const WALK = 3.0, SPRINT = 4.3, ADS_WALK = 1.8, CROUCH_WALK = 1.35;
 const GRAVITY = 21, JUMP_V = 6.6;
 
 export class Player {
@@ -26,6 +26,10 @@ export class Player {
     this.sprinting = false;
     this.speed2d = 0;
     this.shake = 0;
+    this.ground = 0;        // floor height under you (stairs, raised landings)
+    this.crouch = 0;        // 0 standing, 1 fully crouched
+    this.crouching = false;
+    this.noise = 0;         // how loud the last moment was, for things that hunt by sound
     this._p = { x: 0, z: 0 };
   }
 
@@ -34,6 +38,8 @@ export class Player {
     this.vel.set(0, 0, 0);
     this.yaw = -Math.PI / 2; this.pitch = 0; this.recoilPitch = 0;   // face the first door
     this.jumpHeight = 0; this.onGround = true;
+    this.crouch = 0; this.crouching = false; this.noise = 0;
+    this.ground = this.game.world && this.game.world.heightAt ? this.game.world.heightAt(spawn.x, spawn.z) : 0;
     this.maxHealth = 100; this.health = 100; this.sinceHit = 99;
     this.shake = 0;
   }
@@ -58,10 +64,13 @@ export class Player {
     const wl = Math.hypot(wx, wz);
     if (wl > 0) { wx /= wl; wz /= wl; }
 
-    this.sprinting = (k.has('ShiftLeft') || k.has('ShiftRight')) && f > 0 && adsAmount < 0.3 && this.onGround;
+    this.crouching = k.has('ControlLeft') || k.has('ControlRight') || k.has('KeyC');
+    this.crouch += ((this.crouching ? 1 : 0) - this.crouch) * Math.min(1, dt * 11);
+    this.sprinting = (k.has('ShiftLeft') || k.has('ShiftRight')) && f > 0 && adsAmount < 0.3 && this.onGround && !this.crouching;
     const def = this.game.weapons.def;
     const mob = def ? def.mobility : 1;
-    const max = (adsAmount > 0.5 ? ADS_WALK : this.sprinting ? SPRINT : WALK) * mob;
+    let max = (adsAmount > 0.5 ? ADS_WALK : this.sprinting ? SPRINT : WALK) * mob;
+    if (this.crouching) max = Math.min(max, CROUCH_WALK * mob);
     const accel = this.onGround ? 14 : 3;
     const blend = 1 - Math.exp(-accel * dt);
     this.vel.x += (wx * max - this.vel.x) * blend;
@@ -89,12 +98,19 @@ export class Player {
     }
     this.pos.x = p.x; this.pos.z = p.z;
     this.speed2d = Math.hypot(this.vel.x, this.vel.z);
+    // follow the floor under us, smoothed so steps don't jolt the camera
+    const w = this.game.world;
+    const g = w && w.heightAt ? w.heightAt(this.pos.x, this.pos.z) : 0;
+    this.ground += (g - this.ground) * Math.min(1, dt * 13);
 
     if (this.onGround && this.speed2d > 0.6) {
       this.bob += dt * (2.2 + this.speed2d) * 1.5;
-      this.stepT -= dt * this.speed2d;
-      if (this.stepT <= 0) { this.stepT = 2.6; this.game.audio.step(); }
+      this.stepT -= dt * this.speed2d * (this.crouching ? 0.6 : 1);
+      if (this.stepT <= 0) { this.stepT = 2.6; if (!this.crouching) this.game.audio.step(); }
     }
+    // how much noise we are making this instant: crouching is near silent, sprinting is loud
+    const moving = this.onGround ? Math.min(this.speed2d / WALK, 1.5) : 0.5;
+    this.noise = moving * (this.crouching ? 0.12 : this.sprinting ? 1.5 : 1);
 
     // health regen
     this.sinceHit += dt;
@@ -107,10 +123,12 @@ export class Player {
     this.applyCamera();
   }
 
+  get eyeHeight() { return EYE + (CROUCH_EYE - EYE) * this.crouch; }
+
   applyCamera() {
     const bobAmt = this.onGround ? Math.min(this.speed2d / WALK, 1.6) : 0;
     const by = Math.sin(this.bob * 2) * 0.045 * bobAmt;
-    this.camera.position.set(this.pos.x, EYE + this.jumpHeight + by, this.pos.z);
+    this.camera.position.set(this.pos.x, this.ground + this.eyeHeight + this.jumpHeight + by, this.pos.z);
     this.camera.rotation.set(
       this.pitch + this.recoilPitch + (Math.random() - 0.5) * this.shake,
       this.yaw + (Math.random() - 0.5) * this.shake,

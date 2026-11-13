@@ -6,7 +6,7 @@ import { save, loadSave, writeSave, ownsSkin, addSkin } from './save.js';
 import { AudioSys } from './audio.js';
 import { Music } from './music.js';
 import { World, BOX_COST, AMMO_COST } from './world.js';
-import { ZONES, zoneById } from './zones.js';
+import { ZONES, ORDER, zoneById } from './zones.js';
 import { Lobby } from './lobby.js';
 import { Player } from './player.js';
 import { WeaponSystem } from './weapons.js';
@@ -122,15 +122,12 @@ class Game {
   }
 
   // Generate a fresh hotel floor and swap into it.
-  // Where the lift drops you. It switches every couple of floors, at random, never twice running.
+  // The places come in a fixed order, a couple of floors each. The library is always the third
+  // place and is a single bespoke floor.
   zoneFor(floor) {
-    const block = Math.max(0, Math.floor((Math.max(1, floor) - 1) / 2));
-    if (!this.zonePlan[block]) {
-      const prev = this.zonePlan[block - 1];
-      const pool = ZONES.filter(z => z.id !== prev);
-      this.zonePlan[block] = pool[(Math.random() * pool.length) | 0].id;
-    }
-    return zoneById(this.zonePlan[block]);
+    let f = Math.max(1, floor);
+    for (const step of ORDER) { if (f <= step.floors) return zoneById(step.zone); f -= step.floors; }
+    return zoneById(ORDER[ORDER.length - 1].zone);   // past the end, you stay in the last place
   }
 
   _buildHotel() {
@@ -600,9 +597,6 @@ class Game {
       html = `${key}Step out of the wardrobe`; use = () => this._unhide();
     } else if (it && it.type === 'closet') {
       html = `${key}Hide in the wardrobe`; use = () => this._hide(it);
-    } else if (it && it.type === 'stairs') {
-      html = `${key}Descend the stairs <b>(Floor ${this.floor + 1})</b>`;
-      use = () => this.nextFloor();
     } else if (it && it.type === 'wallbuy') {
       const w = WEAPONS[it.weapon];
       if (this.weapons.has(it.weapon)) { const cost = Math.round(it.cost / 2); html = `${key}Buy ${w.name} ammo <b>${cost}</b>`; use = () => { if (this.spend(cost)) this.weapons.refill(it.weapon); }; }
@@ -739,6 +733,13 @@ class Game {
     }
     this.zombies.update(dt);
     this._updateFace(dt);
+    // walked to the bottom of a stairwell
+    if (!this._descending && this.world.heightAt && this.world.heightAt(this.player.pos.x, this.player.pos.z) < -2.2) {
+      this._descending = true;
+      this.audio.door();
+      this.nextFloor();
+      setTimeout(() => { this._descending = false; }, 400);
+    }
     this.effects.update(dt);
     this._updateDrops(dt);
     this._updateBox(dt);

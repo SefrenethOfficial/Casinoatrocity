@@ -472,4 +472,15 @@ export const ZONES = [
   },
 ];
 
+// The places come in this order, a couple of floors each. The library is always the third.
+export const ORDER = [
+  { zone: 'hotel', floors: 2 },
+  { zone: 'carpark', floors: 2 },
+  { zone: 'library', floors: 1 },
+  { zone: 'backrooms', floors: 2 },
+  { zone: 'bathroom', floors: 2 },
+  { zone: 'office', floors: 2 },
+  { zone: 'chips', floors: 2 },
+];
+
 export const zoneById = id => ZONES.find(z => z.id === id) || ZONES[0];

@@ -67,6 +67,9 @@ export class World {
     this.wallGrid = null;  // structural walls + doors only (furniture excluded), for player collision
     this.animated = [];
     this.lamps = [];
+    this.ramps = [];       // sloped / raised floor regions: { minX, maxX, minZ, maxZ, axis, from, to }
+    this.floorHoles = new Set();   // cells the floor plane skips, so stairwells are open
+    this.descendY = -2.4;  // walk below this on the stairwell and the next floor loads
     this.playerSpawn = new THREE.Vector3();
     this.mystery = null;
     this.time = 0;
@@ -79,6 +82,18 @@ export class World {
   blocked(cx, cz) { return (cx < 0 || cz < 0 || cx >= this.w || cz >= this.h) ? true : this.blockedGrid[cz * this.w + cx] === 1; }
   blockedAt(x, z) { return this.blocked(Math.floor(x / CELL), Math.floor(z / CELL)); }
   center(cx, cz) { return [(cx + 0.5) * CELL, (cz + 0.5) * CELL]; }
+
+  // Floor height at a point. Flat everywhere except ramps (stairs) and raised landings.
+  heightAt(x, z) {
+    let y = 0;
+    for (const r of this.ramps) {
+      if (x < r.minX || x > r.maxX || z < r.minZ || z > r.maxZ) continue;
+      if (r.from === r.to) { y = r.to; continue; }
+      const a = r.axis === 'x' ? x : z, t = Math.max(0, Math.min(1, (a - r.a0) / (r.a1 - r.a0)));
+      y = r.from + (r.to - r.from) * t;
+    }
+    return y;
+  }
   wallBlocked(cx, cz) { return (cx < 0 || cz < 0 || cx >= this.w || cz >= this.h) ? true : (this.wallGrid || this.blockedGrid)[cz * this.w + cx] === 1; }
 
   // Register a furniture collider. (px, pz) is the push origin (cell centre); ry the piece's rotation;
@@ -197,7 +212,6 @@ export class World {
       if (solid(cx + 1, cz)) S.quad(paper, CELL, WALL_H, (cx + 1) * CELL, WALL_H / 2, z, -Math.PI / 2);
     }
     const W = w * CELL, Hh = this.h * CELL;
-    S.plane(K.floor, W, Hh, W / 2, 0, Hh / 2, w, this.h);
     S.plane(K.ceil, W, Hh, W / 2, WALL_H, Hh / 2, w, this.h, true);
 
     scene.add(new THREE.AmbientLight(Z.ambient[0], Z.ambient[1]));
@@ -206,6 +220,11 @@ export class World {
     this.wallGrid = this.blockedGrid.slice();   // structural only; furniture is added below as colliders
     for (const r of this.rooms) { if (r.used) this._dressRoom(r); else this.lamps.push(null); }
     for (const d of this.doors) this._buildDoor(d);
+    // the floor goes down last, cell by cell, skipping anything a stairwell has opened up
+    for (let cz = 0; cz < this.h; cz++) for (let cx = 0; cx < w; cx++) {
+      if (this.floorHoles.has(cz * w + cx)) continue;
+      S.plane(K.floor, CELL, CELL, (cx + 0.5) * CELL, 0, (cz + 0.5) * CELL);
+    }
     this.solids.push(...S.build(scene));
     D.build(scene);
   }
@@ -310,18 +329,38 @@ export class World {
 
   _blockCentre(x, z) { this.blockedGrid[Math.floor(z / CELL) * this.w + Math.floor(x / CELL)] = 1; }
 
-  _buildStairs(cx, cz) {
-    const scene = this.scene, D = this.D, M = this.M;
-    this._blockCentre(cx, cz); this._obstacle(cx, cz, 0, 0, 0, 0.95, 0.95);
-    D.plane(new THREE.MeshBasicMaterial({ map: stairTex() }), 1.9, 1.9, cx, 0.03, cz);
-    for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { D.box(M.dark, 0.12, 1.1, 0.12, cx + dx * 0.97, 0.55, cz + dz * 0.97); D.box(M.brass, 0.16, 0.06, 0.16, cx + dx * 0.97, 1.13, cz + dz * 0.97); }
-    for (const y of [0.55, 1.0]) { D.box(M.dark, 0.06, 0.08, 1.94, cx - 0.97, y, cz); D.box(M.dark, 0.06, 0.08, 1.94, cx + 0.97, y, cz); D.box(M.dark, 1.94, 0.08, 0.06, cx, y, cz + 0.97); }
-    const signMat = new THREE.MeshBasicMaterial({ map: plaqueTex('EXIT', '#0a3a1a', '#7dffa8'), side: THREE.DoubleSide });
-    D.add(signMat, new THREE.PlaneGeometry(1.1, 0.38), cx, 2.5, cz - 0.6); D.add(signMat, new THREE.PlaneGeometry(1.1, 0.38), cx - 0.6, 2.5, cz, Math.PI / 2);
-    D.cyl(M.iron, 0.015, 0.015, 0.7, cx, WALL_H - 0.35, cz - 0.6, 4);
-    const label = sprite(['STAIRS', 'TO FLOOR ' + (this.floor + 1)], '#7dffa8', 1.9); label.position.set(cx, 1.8, cz); scene.add(label);
-    this.interactables.push({ type: 'stairs', x: cx, z: cz });
+  // A real stairwell: two cells of steps sinking into the floor, grid-aligned so the hole in the
+  // floor lines up with the flight. Walk to the bottom and the next floor loads.
+  buildStairwell(cx, cz) {
+    const scene = this.scene, D = this.D, M = this.M, drop = 2.6;
+    const a = Math.floor(cx / CELL), b = Math.floor(cz / CELL);
+    const x0 = a * CELL, z0 = b * CELL, z1 = z0 + CELL * 2, mx = x0 + CELL / 2;
+    this.ramps.push({ minX: x0, maxX: x0 + CELL, minZ: z0, maxZ: z1, axis: 'z', a0: z0, a1: z1, from: 0, to: -drop });
+    for (const bb of [b, b + 1]) { this.floorHoles.add(bb * this.w + a); this.blockedGrid[bb * this.w + a] = 0; }
+
+    const n = 10, run = z1 - z0;
+    for (let i = 0; i < n; i++) {
+      const t = i / n, zz = z0 + run * (t + 0.5 / n), y = -drop * t;
+      D.box(M.dark, CELL, 0.1, run / n + 0.03, mx, y - 0.05, zz);
+      D.box(M.black, CELL, drop / n + 0.04, 0.05, mx, y - drop / n / 2, zz - run / n * 0.5);
+    }
+    D.box(M.black, CELL, 2.2, 0.2, mx, -drop - 1.0, z1 - 0.1);       // the dark below
+    D.box(M.black, CELL + 0.3, 0.3, 0.3, mx, -drop - 0.15, z1 - 0.15);
+    for (const sx of [-CELL / 2 - 0.07, CELL / 2 + 0.07]) {
+      D.box(M.dark, 0.16, drop + 1.2, run + 0.1, mx + sx, -drop / 2 + 0.1, z0 + run / 2);
+      D.cyl(M.brass, 0.05, 0.05, run + 0.2, mx + sx * 0.8, 0.6 - drop / 2, z0 + run / 2, 6, Math.atan2(drop, run), Math.PI / 2);
+    }
+    const pit = new THREE.PointLight(0xffd9a0, 10, 7, 1.6); pit.position.set(mx, -drop + 0.9, z1 - 0.6); scene.add(pit);
+    const signMat = new THREE.MeshBasicMaterial({ map: plaqueTex('EXIT', '#0a3a1a', '#7dffa8') });
+    D.box(M.black, 1.25, 0.46, 0.08, mx, 2.55, z0 - 0.08);
+    D.add(signMat, new THREE.PlaneGeometry(1.15, 0.38), mx, 2.55, z0 - 0.13);
+    D.add(signMat, new THREE.PlaneGeometry(1.15, 0.38), mx, 2.55, z0 - 0.03, Math.PI);
+    const label = sprite(['FLOOR ' + (this.floor + 1)], '#7dffa8', 1.25);
+    label.position.set(mx, 1.95, z0 - 0.3); scene.add(label);
+    this.stairwell = { x: mx, z: z0 + run / 2, top: z0 };
   }
+
+  _buildStairs(cx, cz) { this.buildStairwell(cx, cz); }
 
   _buildFeature(r) {
     const f = r.feature, cx = r.cx, cz = r.cz;
