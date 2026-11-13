@@ -86,6 +86,7 @@ export class Lobby {
     this.scene = scene;
     this.h = MAP.length; this.w = MAP[0].length;
     this.blockedGrid = new Uint8Array(this.w * this.h);
+    this.obstacles = [];   // tight colliders for the hall furniture
     this.interactables = [];
     this.solids = [];
     this.animated = [];
@@ -226,13 +227,15 @@ export class Lobby {
         B.push(x, 0, z, ry);
         if (ch === 'T') furn.plant(B, M); else if (ch === 'A') furn.armchair(B, M); else if (ch === 'C') furn.clock(B, M); else furn.sofa(B, M);
         B.pop();
+        const f = { T: [0, -0.5, 0.4, 0.4], A: [0, -0.5, 0.52, 0.46], C: [0, -0.76, 0.34, 0.26], S: [1, -0.5, 1.42, 0.46] }[ch];
+        this._obstacle(x, z, ry, f[0], f[1], f[2], f[3]); this._free(cx, cz); if (ch === 'S') this._free(cx, cz + 1);
       }
-      else if (ch === 'F') this._fireplace(B, M, stone, x, z);
-      else if (ch === 'R' && MAP[cz - 1][cx] !== 'R') this._reception(B, M, x, z);
-      else if (ch === '1') this._cabinet(B, M, x, z, ry, 'cases', 'WEAPON CASES', 0xffd65e);
-      else if (ch === '2') this._cabinet(B, M, x, z, ry, 'knives', 'KNIFE CRATES', 0xb070ff);
-      else if (ch === '3') this._cabinet(B, M, x, z, ry, 'armory', 'ARMORY', 0x5b9dff);
-      else if (ch === '4') this._cabinet(B, M, x, z, ry, 'settings', 'SETTINGS', 0x9fdc6a);
+      else if (ch === 'F') { this._fireplace(B, M, stone, x, z); this.obstacles.push({ x: x - 0.33, z, hw: 0.68, hd: 1.15, c: 1, s: 0 }); this._free(cx, cz); }
+      else if (ch === 'R' && MAP[cz - 1][cx] !== 'R') { this._reception(B, M, x, z); this.obstacles.push({ x: x - 0.45, z: z + 1, hw: 0.46, hd: 1.9, c: 1, s: 0 }); this._free(cx, cz); this._free(cx, cz + 1); }
+      else if (ch === '1') { this._cabinet(B, M, x, z, ry, 'cases', 'WEAPON CASES', 0xffd65e); this._obstacle(x, z, ry, 0, -0.5, 0.78, 0.48); this._free(cx, cz); }
+      else if (ch === '2') { this._cabinet(B, M, x, z, ry, 'knives', 'KNIFE CRATES', 0xb070ff); this._obstacle(x, z, ry, 0, -0.5, 0.78, 0.48); this._free(cx, cz); }
+      else if (ch === '3') { this._cabinet(B, M, x, z, ry, 'armory', 'ARMORY', 0x5b9dff); this._obstacle(x, z, ry, 0, -0.5, 0.78, 0.48); this._free(cx, cz); }
+      else if (ch === '4') { this._cabinet(B, M, x, z, ry, 'settings', 'SETTINGS', 0x9fdc6a); this._obstacle(x, z, ry, 0, -0.5, 0.78, 0.48); this._free(cx, cz); }
       else if (ch === 'E') this._elevator(B, M, x, z);
     }
     // wall dressing: sconces and paintings
@@ -349,20 +352,49 @@ export class Lobby {
     if (s && s.intensity > this.stormBase) { s.intensity = Math.max(this.stormBase, s.intensity - dt * 1100); if (s.intensity <= this.stormBase + 40 && this.skyMat) this.skyMat.color.setHex(0x3c3c3c); }
   }
 
+  _free(cx, cz) { if (cx >= 0 && cz >= 0 && cx < this.w && cz < this.h) this.blockedGrid[cz * this.w + cx] = 0; }
+
+  // A furniture collider: (px, pz) push origin, ry rotation, (lx, lz, hw, hd) local footprint.
+  _obstacle(px, pz, ry, lx, lz, hw, hd) {
+    const c = Math.cos(ry), sn = Math.sin(ry);
+    this.obstacles.push({ x: px + lx * c + lz * sn, z: pz - lx * sn + lz * c, hw, hd, c, s: sn });
+  }
+
   collideCircle(p, r) {
-    for (let pass = 0; pass < 2; pass++) {
-      const x0 = Math.floor((p.x - r) / CELL), x1 = Math.floor((p.x + r) / CELL);
-      const z0 = Math.floor((p.z - r) / CELL), z1 = Math.floor((p.z + r) / CELL);
-      for (let cz = z0; cz <= z1; cz++) for (let cx = x0; cx <= x1; cx++) {
-        if (!this.blocked(cx, cz)) continue;
-        const minX = cx * CELL, maxX = minX + CELL, minZ = cz * CELL, maxZ = minZ + CELL;
-        const nx = Math.max(minX, Math.min(p.x, maxX)), nz = Math.max(minZ, Math.min(p.z, maxZ));
-        const dx = p.x - nx, dz = p.z - nz, d2 = dx * dx + dz * dz;
-        if (d2 >= r * r) continue;
-        if (d2 > 1e-9) { const d = Math.sqrt(d2), push = (r - d) / d; p.x += dx * push; p.z += dz * push; }
-        else { const l = p.x - minX, rr = maxX - p.x, t = p.z - minZ, b = maxZ - p.z, m = Math.min(l, rr, t, b); if (m === l) p.x = minX - r; else if (m === rr) p.x = maxX + r; else if (m === t) p.z = minZ - r; else p.z = maxZ + r; }
-      }
-    }
+    this._collideWalls(p, r);
+    for (const o of this.obstacles) this._collideBox(p, r, o);
+    this._collideWalls(p, r);
     return p;
+  }
+
+  _collideWalls(p, r) {
+    const x0 = Math.floor((p.x - r) / CELL), x1 = Math.floor((p.x + r) / CELL);
+    const z0 = Math.floor((p.z - r) / CELL), z1 = Math.floor((p.z + r) / CELL);
+    for (let cz = z0; cz <= z1; cz++) for (let cx = x0; cx <= x1; cx++) {
+      if (!this.blocked(cx, cz)) continue;
+      const minX = cx * CELL, maxX = minX + CELL, minZ = cz * CELL, maxZ = minZ + CELL;
+      const nx = Math.max(minX, Math.min(p.x, maxX)), nz = Math.max(minZ, Math.min(p.z, maxZ));
+      const dx = p.x - nx, dz = p.z - nz, d2 = dx * dx + dz * dz;
+      if (d2 >= r * r) continue;
+      if (d2 > 1e-9) { const d = Math.sqrt(d2), push = (r - d) / d; p.x += dx * push; p.z += dz * push; }
+      else { const l = p.x - minX, rr = maxX - p.x, t = p.z - minZ, b = maxZ - p.z, m = Math.min(l, rr, t, b); if (m === l) p.x = minX - r; else if (m === rr) p.x = maxX + r; else if (m === t) p.z = minZ - r; else p.z = maxZ + r; }
+    }
+  }
+
+  _collideBox(p, r, o) {
+    const dx = p.x - o.x, dz = p.z - o.z;
+    const lx = dx * o.c - dz * o.s, lz = dx * o.s + dz * o.c;
+    const clx = Math.max(-o.hw, Math.min(lx, o.hw)), clz = Math.max(-o.hd, Math.min(lz, o.hd));
+    const ddx = lx - clx, ddz = lz - clz, d2 = ddx * ddx + ddz * ddz;
+    let nlx, nlz;
+    if (d2 > 1e-7) {
+      if (d2 >= r * r) return;
+      const d = Math.sqrt(d2), f = r / d; nlx = clx + ddx * f; nlz = clz + ddz * f;
+    } else {
+      const ex = o.hw - Math.abs(lx), ez = o.hd - Math.abs(lz);
+      if (ex < ez) { nlx = (lx < 0 ? -o.hw - r : o.hw + r); nlz = lz; } else { nlx = lx; nlz = (lz < 0 ? -o.hd - r : o.hd + r); }
+    }
+    p.x = o.x + nlx * o.c + nlz * o.s;
+    p.z = o.z - nlx * o.s + nlz * o.c;
   }
 }
