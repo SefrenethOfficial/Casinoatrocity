@@ -380,3 +380,24 @@ kbd:first-child { margin-left: 0; }
 #keypad-keys .btn { width: auto; text-align: center; }
 #keypad-msg { margin: 0; min-height: 18px; font-size: 14px; }
 #keypad-msg.ok { color: #7dffa8; } #keypad-msg.bad { color: var(--crimson); }
+
+/* Jumpscare: the thing fills the screen for a beat. */
+#jumpscare { position: fixed; inset: 0; z-index: 60; background: #000 center/contain no-repeat; pointer-events: none; }
+#jumpscare.hidden { display: none; }
+#jumpscare.play { animation: scare 0.16s steps(2) infinite; }
+@keyframes scare { 0% { transform: scale(1.02) translate(0, 0); filter: brightness(1.1); }
+  50% { transform: scale(1.09) translate(-6px, 4px); filter: brightness(0.75) contrast(1.4); }
+  100% { transform: scale(1.04) translate(5px, -3px); filter: brightness(1.2); } }
+
+/* Breath control while you are hidden. */
+#heart { position: fixed; right: 36px; top: 50%; transform: translateY(-50%); z-index: 30; display: grid; gap: 8px; justify-items: center; pointer-events: none; }
+#heart.hidden { display: none; }
+.heart-label { font-size: 12px; color: var(--muted); text-align: center; text-shadow: 1px 1px 0 #000; }
+.heart-label kbd { font-size: 11px; }
+#heart-bar { position: relative; width: 42px; height: 230px; background: rgba(8,4,4,0.75); border: 2px solid #4a2630; overflow: hidden; }
+#heart-band { position: absolute; left: 0; right: 0; background: rgba(125,255,168,0.22); border-top: 1px solid rgba(125,255,168,0.6); border-bottom: 1px solid rgba(125,255,168,0.6); }
+#heart-fill { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(0deg, #7a1020, #e03048); }
+#heart-bar.bad { border-color: var(--crimson); animation: heartbad 0.3s steps(2) infinite; }
+@keyframes heartbad { 50% { box-shadow: 0 0 22px rgba(224,48,72,0.9); } }
+#heart-danger-track { width: 80px; height: 6px; background: rgba(8,4,4,0.8); border: 1px solid #4a2630; }
+#heart-danger { height: 100%; width: 0; background: var(--crimson); }

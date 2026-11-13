@@ -8,6 +8,7 @@ import { Music } from './music.js';
 import { World, BOX_COST, AMMO_COST } from './world.js';
 import { ZONES, ORDER, zoneById } from './zones.js';
 import { LIBRARY, SHAPES, ROMAN, shapeIcon } from './library.js';
+import { Stalker, stalkerFaceDataURL } from './stalker.js';
 import { Lobby } from './lobby.js';
 import { Player } from './player.js';
 import { WeaponSystem } from './weapons.js';
@@ -151,6 +152,12 @@ class Game {
     this.player.yaw = Math.PI;   // face into the room
     // the backrooms: you clip through and land on your side on the carpet
     this.fallIn = Z.noclip ? { t: 0 } : null;
+    if (this.stalker) { this.stalker.dispose(); this.stalker = null; }
+    this.heart = null; $('heart').classList.add('hidden');
+    if (Z.stalker) {
+      const s = this.world.spawns[0] || { x: this.world.playerSpawn.x, z: this.world.playerSpawn.z - 10 };
+      this.stalker = new Stalker(this, s.x, s.z);
+    }
     if (Z.music) this.music.play(Z.music); else if (this.music.cur !== 'face') this.music.stop();
     this._syncShapes();
   }
@@ -218,6 +225,8 @@ class Game {
   }
 
   // ---------------------------------------------------------------- the face
+  _clearStalker() { if (this.stalker) { this.stalker.dispose(); this.stalker = null; } }
+
   _clearFace() {
     if (this.face && this.face.sprite) this.face.sprite.parent && this.face.sprite.parent.remove(this.face.sprite);
     if (this.face && this.music.cur === 'face') this.music.stop();
@@ -280,6 +289,7 @@ class Game {
         if (this.zombies.damage(z, 1e9)) this._goreKill(z, 'gib', V.set(z.x - f.pos.x, 0, z.z - f.pos.z).normalize());
       }
       const p = this.player.pos;
+      if (this.hidden && !this.heart && Math.hypot(p.x - f.pos.x, p.z - f.pos.z) < 14) this._startHeart(6);
       if (!this.hidden && !this.admin.god && this.state === 'playing' && Math.hypot(p.x - f.pos.x, p.z - f.pos.z) < 10) {
         this.lastHit = { type: 'face' };
         this.player.health = 0; this.hud.blood(4);
@@ -293,11 +303,79 @@ class Game {
 
   _hide(it) {
     this.hidden = it;
+    this.hideT = 0;
     this.audio.door();
     this._clearInput();
-    $('hide').classList.remove('hidden');
+    if (this.zone && this.zone.id !== 'bathroom') $('hide').classList.remove('hidden');
+    // if something is already hunting, you are straight into holding your breath
+    if (this.face && this.face.phase === 'fly') this._startHeart(7);
   }
-  _unhide() { this.hidden = null; this.audio.door(); $('hide').classList.add('hidden'); }
+  _unhide() {
+    this.hidden = null; this.heart = null;
+    this.audio.door();
+    $('hide').classList.add('hidden'); $('heart').classList.add('hidden');
+  }
+
+  // ---------------------------------------------------------------- the stalker
+  makeNoise(x, z, loud) { if (this.stalker) this.stalker.hear(x, z, loud); }
+
+  caughtByStalker() {
+    if (this.state !== 'playing' || this.admin.god) return;
+    this.lastHit = { type: 'stalker' };
+    this._jumpscare('stalker');
+  }
+
+  // It has worked out roughly where you are and is circling the door.
+  stalkerAtTheDoor() { this.audio.screech(); this._startHeart(11); }
+
+  // ---------------------------------------------------------------- holding your breath
+  _startHeart(dur) {
+    if (this.heart) return;
+    this.heart = { t: 0, dur, rate: 0.5, danger: 0 };
+    $('heart').classList.remove('hidden');
+  }
+
+  _updateHeart(dt) {
+    const h = this.heart; if (!h) return;
+    h.t += dt;
+    const held = this.input.keys.has('Space');
+    h.rate += (held ? -0.5 : 0.38) * dt + (Math.random() - 0.5) * dt * 0.25;
+    h.rate = Math.max(0, Math.min(1, h.rate));
+    const squeeze = Math.min(0.14, h.t * 0.012);
+    const lo = 0.3 + squeeze, hi = 0.7 - squeeze;
+    const safe = h.rate > lo && h.rate < hi;
+    h.danger = Math.max(0, h.danger + (safe ? -dt * 0.7 : dt));
+    $('heart-fill').style.height = (h.rate * 100).toFixed(1) + '%';
+    $('heart-band').style.bottom = (lo * 100).toFixed(1) + '%';
+    $('heart-band').style.height = ((hi - lo) * 100).toFixed(1) + '%';
+    $('heart-bar').classList.toggle('bad', !safe);
+    $('heart-danger').style.width = Math.min(100, h.danger / 1.6 * 100).toFixed(0) + '%';
+    if (h.danger >= 1.6) { this.heart = null; $('heart').classList.add('hidden'); this.lastHit = { type: this.stalker && this.stalker.state === 'stalk' ? 'stalker' : 'face' }; this._jumpscare(this.lastHit.type); return; }
+    if (h.t >= h.dur) {
+      this.heart = null; $('heart').classList.add('hidden');
+      if (this.stalker && this.stalker.state === 'stalk') { this.stalker.state = 'wander'; this.stalker.heard = 0; }
+      this.hud.popup('It moves off', '#9fdc6a');
+    }
+  }
+
+  // ---------------------------------------------------------------- jumpscares
+  _jumpscare(kind) {
+    if (this._scaring) return;
+    this._scaring = true;
+    const el = $('jumpscare');
+    if (kind === 'stalker') { if (!this._stalkerFace) this._stalkerFace = stalkerFaceDataURL(); el.style.backgroundImage = `url(${this._stalkerFace})`; }
+    else el.style.backgroundImage = 'url(assets/img/face.webp)';
+    el.classList.remove('hidden'); el.classList.remove('play'); void el.offsetWidth; el.classList.add('play');
+    this.audio.screech(); this.audio.roar();
+    this.hud.blood(5);
+    setTimeout(() => {
+      el.classList.add('hidden'); this._scaring = false;
+      this.player.health = 0;
+      this.heart = null; this.hidden = null;
+      $('heart').classList.add('hidden'); $('hide').classList.add('hidden');
+      this.gameOver();
+    }, 1150);
+  }
 
   resetRun() {
     this.points = 500;
@@ -321,6 +399,7 @@ class Game {
   enterLobby() {
     clearTimeout(this._elevT); this._arriving = false;
     this.fallIn = null;
+    this._clearStalker(); this.heart = null; $('heart').classList.add('hidden');
     const car = $('elevator-car'); if (car) car.classList.remove('boarding', 'riding', 'arriving');
     this.audio.unlock();
     this.music.play('lobby');
@@ -474,6 +553,7 @@ class Game {
       bellhop: { title: 'TORN APART', what: 'A bellhop dragged you down and tore you apart', tip: 'Bellhops are slow but they swarm. Keep backpedalling, never stand still in a doorway, and thin the pack before it reaches you.' },
       maid: { title: 'RUN DOWN', what: 'A maid sprinted you down and clawed you open', tip: 'Maids are fragile but very fast. When you hear the shriek, stop and face it: two or three body shots drop one before it reaches you.' },
       lodger: { title: 'DRAGGED UNDER', what: 'A lodger scuttled in low and opened your throat', tip: 'Lodgers stay below your crosshair. Aim at the floor in front of you and fire early, or draw the knife and outrun it.' },
+      stalker: { title: 'TAKEN', what: 'The Stalker found you in the dark and took you apart', tip: 'It is blind but it hears everything. Crouch (Ctrl) to move almost silently, never fire a gun near it, and get into a wardrobe if it closes in.' },
       face: { title: 'AWESOME', what: 'The face came screaming down the corridor and you were standing in the open', tip: 'When the lights stutter and the music starts you have about six seconds. Get into a wardrobe (F) and stay there until it has gone past.' },
       butcher: { title: 'BUTCHERED', what: 'The butcher split your skull with his cleaver', tip: 'The butcher soaks up damage and one chop nearly kills you. Never trade blows up close: back away through the room and empty a magazine into the sack on his head.' },
     };
@@ -800,13 +880,15 @@ class Game {
     if (this.hidden) {
       // shut in the wardrobe, peering out through the slats
       const h = this.hidden;
-      this.camera.position.set(h.x, 1.5, h.z);
+      this.camera.position.set(h.x, this.zone && this.zone.id === 'bathroom' ? 1.95 : 1.5, h.z);
       this.camera.rotation.set(0, h.ry + Math.PI + Math.sin(this.time * 0.7) * 0.08, 0);
     } else {
       this.player.update(dt, this.input, this.weapons.ads);
       this.weapons.update(dt, this.input);
     }
     this.zombies.update(dt);
+    if (this.stalker) this.stalker.update(dt, this.player);
+    this._updateHeart(dt);
     this._updateFace(dt);
     // walked to the bottom of a stairwell
     if (!this._descending && this.world.heightAt && this.world.heightAt(this.player.pos.x, this.player.pos.z) < (this.world.descendY ?? -2.2)) {

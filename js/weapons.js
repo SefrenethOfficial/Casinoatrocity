@@ -217,6 +217,7 @@ export class WeaponSystem {
     this.kick = 1;
     this.forcePose = true;
     game.audio.shot(def.sound);
+    game.makeNoise(game.player.pos.x, game.player.pos.z, 45);   // gunfire carries a long way
 
     const cam = game.camera;
     const fwd = player.forward(V1);

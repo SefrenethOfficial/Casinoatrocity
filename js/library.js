@@ -106,7 +106,7 @@ function paperTex(order) {
 }
 
 export const LIBRARY = {
-  id: 'library', name: 'The Reading Room', custom: true, size: [MAP[0].length, MAP.length],
+  id: 'library', name: 'The Reading Room', custom: true, stalker: true, size: [MAP[0].length, MAP.length],
   music: 'library',
   fog: { color: 0x161013, near: 12, far: 52 },
   ambient: [0x9a8a70, 1.05], hemi: [0xa89878, 0x2e2418, 0.6],
