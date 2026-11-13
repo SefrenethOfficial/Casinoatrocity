@@ -8,7 +8,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%23b3121d'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23ffd65e' stroke-width='3' stroke-dasharray='4 3'/%3E%3C/svg%3E">
   <script>
     (function () {
-      var BUILD = '26';
+      var BUILD = '29';
       var files = ['audio', 'build', 'cases', 'data', 'gore', 'hud', 'lobby', 'main', 'models', 'music', 'player', 'psx', 'save', 'weapons', 'world', 'zombies'];
       var imports = { three: './lib/three.module.js' };
       files.forEach(function (f) { imports['./js/' + f + '.js'] = './js/' + f + '.js?v=' + BUILD; });
@@ -60,20 +60,29 @@
     <div id="lock-hint" class="hidden">Click to play</div>
   </div>
 
-  <!-- Elevator intermission -->
+  <!-- Elevator intermission: a ride down into the hotel -->
   <section id="screen-elevator" class="screen hidden">
-    <div class="panel wide elevator">
-      <h2>Going Down</h2>
-      <p class="elev-sub">The elevator rattles down toward <b id="elev-floor">Floor 1</b>. Stock up before the doors open.</p>
-      <div class="elev-shop">
-        <button class="btn" id="buy-flash">Buy Flashlight &mdash; 300</button>
-        <button class="btn" id="buy-picks">Buy 3 Lockpicks &mdash; 150</button>
+    <div id="elevator-car" class="elevator-car">
+      <div class="elev-topbar"><span class="elev-arrow">&#9660;</span><span class="elev-num" id="elev-floornum">B1</span><span class="elev-arrow">&#9660;</span></div>
+      <div class="elev-view">
+        <div class="elev-streaks"></div>
+        <div class="elev-glow"></div>
+        <div class="elev-door l"></div>
+        <div class="elev-door r"></div>
+        <div class="elev-seam"></div>
       </div>
-      <p class="elev-have">You have: <span id="elev-have">0 lockpicks</span></p>
-      <div class="balance"><span class="chip-ico"></span><b data-chips>0</b> chips</div>
-      <div class="row">
-        <button class="btn primary" data-act="descend">Open the doors</button>
-        <button class="btn" data-act="elev-back">Back to lobby</button>
+      <div class="elev-controls">
+        <p class="elev-sub">Heading down to <b id="elev-floor">Floor 1</b>. Stock up before the doors open.</p>
+        <div class="elev-shop">
+          <button class="btn" id="buy-flash">Buy Flashlight &mdash; 300</button>
+          <button class="btn" id="buy-picks">Buy 3 Lockpicks &mdash; 150</button>
+        </div>
+        <p class="elev-have">You have: <span id="elev-have">0 lockpicks</span></p>
+        <div class="balance"><span class="chip-ico"></span><b data-chips>0</b> chips</div>
+        <div class="row">
+          <button class="btn primary" data-act="descend">Open the doors</button>
+          <button class="btn" data-act="elev-back">Back to lobby</button>
+        </div>
       </div>
     </div>
   </section>

@@ -55,6 +55,21 @@ export class Music {
     this.cur = null;
   }
 
+  // Jump the current track to a given time (used for the elevator 'arrival' sting). If the audio
+  // hasn't buffered that far yet, retry as more of it loads.
+  seek(sec) {
+    const a = this.els[this.cur]; if (!a) return;
+    const go = () => {
+      const t = isFinite(a.duration) ? Math.min(sec, a.duration - 0.2) : sec;
+      try { a.currentTime = Math.max(0, t); } catch (e) { return false; }
+      if (a.paused) { const pr = a.play(); if (pr && pr.catch) pr.catch(() => {}); }
+      return Math.abs(a.currentTime - t) < 1.5;
+    };
+    if (go()) return;
+    const retry = () => { if (go()) { a.removeEventListener('progress', retry); a.removeEventListener('canplaythrough', retry); } };
+    a.addEventListener('progress', retry); a.addEventListener('canplaythrough', retry);
+  }
+
   // Retry the current track (call once from a user gesture if autoplay was blocked).
   resume() {
     if (this.cur) {

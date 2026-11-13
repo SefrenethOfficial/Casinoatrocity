@@ -241,6 +241,8 @@ class Game {
 
   // ---------------------------------------------------------------- flow
   enterLobby() {
+    clearTimeout(this._elevT); this._arriving = false;
+    const car = $('elevator-car'); if (car) car.classList.remove('boarding', 'riding', 'arriving');
     this.audio.unlock();
     this.music.play('lobby');
     if (this.scene !== this.lobbyScene) { this.scene = this.lobbyScene; this.world = this.lobby; }
@@ -262,6 +264,14 @@ class Game {
     this.unlockPointer();
     this._syncElevator();
     this.showScreen('elevator');
+    this._arriving = false;
+    const car = $('elevator-car');
+    car.classList.remove('riding', 'arriving');
+    car.classList.add('boarding');            // doors open — you step in
+    $('elev-floornum').textContent = 'B' + (this.floor + 1);
+    this.audio.door();
+    clearTimeout(this._elevT);
+    this._elevT = setTimeout(() => { car.classList.remove('boarding'); car.classList.add('riding'); this.audio.door(); }, 1100);
   }
 
   _syncElevator() {
@@ -274,7 +284,24 @@ class Game {
     $('elev-have').textContent = `${this.lockpicks} lockpick${this.lockpicks === 1 ? '' : 's'}${this.hasLight ? ' • flashlight' : ''}`;
   }
 
+  // 'Open the doors': the ride ends — the song jumps to its final bars, the doors slide open,
+  // and then you step out onto the floor.
   descend() {
+    if (this._arriving) return;
+    this._arriving = true;
+    clearTimeout(this._elevT);
+    const car = $('elevator-car');
+    car.classList.remove('boarding'); car.classList.add('riding');
+    this.music.stop();                // skip to the last part of the elevator tune:
+    this.audio.elevatorArrive();      // a clip of its final bars, as the doors open
+    this.audio.door();
+    car.classList.add('arriving');    // doors part onto the floor
+    this._elevT = setTimeout(() => this._enterFloor(), 1900);
+  }
+
+  _enterFloor() {
+    this._arriving = false;
+    const car = $('elevator-car'); if (car) car.classList.remove('boarding', 'riding', 'arriving');
     this.floor++;
     this.music.stop();
     this.audio.unlock();

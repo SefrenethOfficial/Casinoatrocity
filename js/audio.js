@@ -11,7 +11,7 @@ const SHOTS = {
   revolver: { rate: 0.7,  vol: 1.0,  dur: 0.42, freq: 1300, q: 0.6, gain: 0.8,  thump: 110, thumpGain: 0.95, boom: true },
 };
 const SAMPLES = { shot: 'assets/sfx/shot.mp3', click: 'assets/sfx/click.mp3', upgrade: 'assets/sfx/upgrade.mp3', door: 'assets/sfx/door.mp3',
-  swing: 'assets/sfx/swing.mp3', stab: 'assets/sfx/stab.mp3', splat: 'assets/sfx/splat.mp3', reload: 'assets/sfx/reload.mp3', gib: 'assets/sfx/gib.mp3', impact: 'assets/sfx/impact.mp3' };
+  swing: 'assets/sfx/swing.mp3', stab: 'assets/sfx/stab.mp3', splat: 'assets/sfx/splat.mp3', reload: 'assets/sfx/reload.mp3', gib: 'assets/sfx/gib.mp3', impact: 'assets/sfx/impact.mp3', elevArrive: 'assets/sfx/elev-arrive.mp3' };
 const SHOT_LEAD_IN = 0.06;   // the gunshot recording starts with a short silence
 
 export class AudioSys {
@@ -152,6 +152,8 @@ export class AudioSys {
     this._tone('sawtooth', 620, 300, 0.35, 0.12);
     this._noise(0.3, 'bandpass', 2200, 4, 0.14, 0, 900);
   }
+  elevatorArrive() { this._sample('elevArrive', 1, 0.85); }
+
   melee() { this._sample('swing', 0.7, 0.7, 0.07); this._noise(0.12, 'bandpass', 900, 1.2, 0.3, 0, 300); }
   hurt() { this._tone('sawtooth', 160, 70, 0.25, 0.4); this._noise(0.12, 'lowpass', 500, 1, 0.5); }
   step() { this._noise(0.05, 'lowpass', 260, 1, 0.07); }
