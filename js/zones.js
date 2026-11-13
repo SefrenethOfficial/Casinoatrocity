@@ -5,6 +5,7 @@
 // z = -1 (against the wall) and it faces +z. `foot` is its collider: [lx, lz, hw, hd].
 import * as THREE from 'three';
 import { tex, speckle, flat, glow, mapped, furn, wallpaperTex, ceilingTex, rugTex, boardsTex, doorTex } from './build.js';
+import { LIBRARY } from './library.js';
 
 // ---------------------------------------------------------------- the chips texture
 const _chipClones = [];
@@ -150,6 +151,8 @@ function tallCupboard(B, body = 0xb9b39a, trim = 0x7d7866) {
 
 // ---------------------------------------------------------------- zones
 export const ZONES = [
+
+  LIBRARY,
 
   // ------------------------------------------------ the hotel (unchanged behaviour)
   {

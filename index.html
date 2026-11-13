@@ -8,8 +8,8 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%23b3121d'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%23ffd65e' stroke-width='3' stroke-dasharray='4 3'/%3E%3C/svg%3E">
   <script>
     (function () {
-      var BUILD = '32';
-      var files = ['audio', 'build', 'cases', 'data', 'gore', 'hud', 'lobby', 'main', 'models', 'music', 'player', 'psx', 'save', 'weapons', 'world', 'zombies', 'zones'];
+      var BUILD = '33';
+      var files = ['audio', 'build', 'cases', 'data', 'gore', 'hud', 'lobby', 'main', 'library', 'models', 'music', 'player', 'psx', 'save', 'weapons', 'world', 'zombies', 'zones'];
       var imports = { three: './lib/three.module.js' };
       files.forEach(function (f) { imports['./js/' + f + '.js'] = './js/' + f + '.js?v=' + BUILD; });
       document.write('<script type="importmap">' + JSON.stringify({ imports: imports }) + '<\/script>');
@@ -51,6 +51,7 @@
     </div>
     <div id="announce"><div id="announce-main"></div><div id="announce-sub"></div></div>
     <div id="popups"></div>
+    <div id="shapes" class="hidden"></div>
   </div>
 
   <!-- Interaction prompt: shown in the lobby and in the hotel -->
@@ -85,6 +86,23 @@
           <button class="btn" data-act="elev-back">Back to lobby</button>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- Door keypad (the library) -->
+  <section id="screen-keypad" class="screen hidden">
+    <div class="panel keypad">
+      <h2>Keypad</h2>
+      <p class="keypad-sub">Five digits, in the order on the note.</p>
+      <div id="keypad-display">_____</div>
+      <div id="keypad-keys">
+        <button class="btn small" data-k="1">1</button><button class="btn small" data-k="2">2</button><button class="btn small" data-k="3">3</button>
+        <button class="btn small" data-k="4">4</button><button class="btn small" data-k="5">5</button><button class="btn small" data-k="6">6</button>
+        <button class="btn small" data-k="7">7</button><button class="btn small" data-k="8">8</button><button class="btn small" data-k="9">9</button>
+        <button class="btn small" data-k="clear">Clear</button><button class="btn small" data-k="0">0</button><button class="btn small primary" data-k="enter">Enter</button>
+      </div>
+      <p id="keypad-msg"></p>
+      <button class="btn" id="keypad-close">Step back</button>
     </div>
   </section>
 

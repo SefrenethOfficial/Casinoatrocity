@@ -5,6 +5,8 @@ const TRACKS = {
   elevator: 'assets/music/elevator.mp3',
   death: 'assets/music/death.mp3',
   face: 'assets/music/face.mp3',
+  library: 'assets/music/library-loop.mp3',
+  libraryEnd: 'assets/music/library-end.mp3',
 };
 
 export class Music {

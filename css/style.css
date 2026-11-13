@@ -360,3 +360,23 @@ kbd:first-child { margin-left: 0; }
   background: radial-gradient(ellipse at 50% 50%, rgba(255,20,20,0) 30%, rgba(150,0,0,0.45) 68%, rgba(70,0,0,0.92) 100%);
   mix-blend-mode: screen; transition: opacity 0.05s linear; }
 #face-warn.on { display: block; }
+
+/* The library's shape tracker and door keypad. */
+#shapes { position: absolute; left: 18px; bottom: 96px; display: grid; gap: 6px; font-size: 13px; pointer-events: none; }
+#shapes.hidden { display: none; }
+.sh-row { display: flex; align-items: center; gap: 8px; background: rgba(8,5,4,0.55); padding: 5px 10px; border-left: 3px solid var(--gold); }
+.sh-label { font-family: var(--display); font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); min-width: 48px; }
+.sh-row span { display: inline-flex; align-items: center; gap: 3px; }
+.sh-row img { width: 18px; height: 18px; image-rendering: pixelated; }
+.sh-row i { font-style: normal; font-family: var(--display); color: var(--muted); font-size: 11px; margin-right: 2px; }
+.sh-row b { color: #fff; }
+.sh-row em { color: var(--muted); font-style: italic; }
+
+.panel.keypad { text-align: center; gap: 12px; width: min(340px, 92vw); }
+.keypad-sub { margin: 0; color: var(--muted); font-size: 13px; }
+#keypad-display { font-family: var(--display); font-size: 40px; letter-spacing: 0.26em; color: #7dffa8; background: #06100a;
+  border: 2px solid #2a4a34; padding: 8px 0; text-shadow: 0 0 14px rgba(80,255,150,0.5); }
+#keypad-keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+#keypad-keys .btn { width: auto; text-align: center; }
+#keypad-msg { margin: 0; min-height: 18px; font-size: 14px; }
+#keypad-msg.ok { color: #7dffa8; } #keypad-msg.bad { color: var(--crimson); }

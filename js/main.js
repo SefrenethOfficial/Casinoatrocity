@@ -7,6 +7,7 @@ import { AudioSys } from './audio.js';
 import { Music } from './music.js';
 import { World, BOX_COST, AMMO_COST } from './world.js';
 import { ZONES, ORDER, zoneById } from './zones.js';
+import { LIBRARY, SHAPES, ROMAN, shapeIcon } from './library.js';
 import { Lobby } from './lobby.js';
 import { Player } from './player.js';
 import { WeaponSystem } from './weapons.js';
@@ -18,7 +19,7 @@ import { CaseUI } from './cases.js';
 import { buildWeaponModel, disposeWeaponModel } from './models.js';
 
 const $ = id => document.getElementById(id);
-const SCREENS = ['cases', 'armory', 'settings', 'pause', 'death', 'admin', 'elevator'];
+const SCREENS = ['cases', 'armory', 'settings', 'pause', 'death', 'admin', 'elevator', 'keypad'];
 const POWERUPS = {
   max:    { name: 'MAX AMMO',      color: 0x3dff7a },
   double: { name: 'DOUBLE POINTS', color: 0xffd65e },
@@ -150,6 +151,70 @@ class Game {
     this.player.yaw = Math.PI;   // face into the room
     // the backrooms: you clip through and land on your side on the carpet
     this.fallIn = Z.noclip ? { t: 0 } : null;
+    if (Z.music) this.music.play(Z.music); else if (this.music.cur !== 'face') this.music.stop();
+    this._syncShapes();
+  }
+
+  // ---------------------------------------------------------------- the library
+  _takeBook(it) {
+    const p = this.world.puzzle; if (!p || p.found[it.shape]) return;
+    p.found[it.shape] = p.digits[it.shape];
+    this.audio.powerup();
+    if (it.mesh) it.mesh.parent && it.mesh.parent.remove(it.mesh);
+    if (it.light) it.light.parent && it.light.parent.remove(it.light);
+    const i = this.world.interactables.indexOf(it); if (i >= 0) this.world.interactables.splice(i, 1);
+    this.hud.popup('Book taken', '#7fd4ff');
+    this._syncShapes();
+  }
+
+  // The shape tracker in the corner: what the paper said, and what the books told you.
+  _syncShapes() {
+    const p = this.world && this.world.puzzle;
+    const box = $('shapes');
+    if (!p) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+    box.classList.remove('hidden');
+    const found = SHAPES.filter(k => p.found[k] !== undefined)
+      .map(k => `<span><img src="${shapeIcon(k)}" alt=""><b>${p.found[k]}</b></span>`).join('');
+    const seq = p.seenPaper
+      ? p.order.map((k, i) => `<span><i>${ROMAN[i]}</i><img src="${shapeIcon(k, '#e8dfc4')}" alt=""><b>${p.found[k] !== undefined ? p.found[k] : '?'}</b></span>`).join('')
+      : '<em>Find the librarian\'s note</em>';
+    box.innerHTML = `<div class="sh-row"><span class="sh-label">Books</span>${found || '<em>none yet</em>'}</div>` +
+      `<div class="sh-row"><span class="sh-label">Order</span>${seq}</div>`;
+  }
+
+  _openKeypad() {
+    this.state = 'keypad'; this._keyEntry = '';
+    this.unlockPointer();
+    $('keypad-msg').textContent = '';
+    this._syncKeypad();
+    this.showScreen('keypad');
+  }
+  _syncKeypad() { $('keypad-display').textContent = (this._keyEntry + '_____').slice(0, 5); }
+  _keypadPress(d) {
+    if (this._keyEntry.length >= 5) return;
+    this._keyEntry += d; this.audio.tick(); this._syncKeypad();
+  }
+  _keypadSubmit() {
+    const p = this.world.puzzle;
+    if (this._keyEntry === p.code) {
+      p.unlocked = true;
+      LIBRARY.openExit(this.world);
+      this.audio.upgrade();
+      this.music.play('libraryEnd', { loop: false });   // skip to the last part of the song
+      $('keypad-msg').textContent = 'The lock turns.';
+      $('keypad-msg').className = 'ok';
+      setTimeout(() => this._closeKeypad(), 900);
+    } else {
+      this.audio.gameOver();
+      $('keypad-msg').textContent = 'Wrong.';
+      $('keypad-msg').className = 'bad';
+      this._keyEntry = ''; this._syncKeypad();
+    }
+  }
+  _closeKeypad() {
+    if (this.state !== 'keypad') return;
+    this.state = 'playing'; this.screen = null;
+    this._hideAllScreens(); this.hud.show(true); this.lockPointer();
   }
 
   // ---------------------------------------------------------------- the face
@@ -597,6 +662,16 @@ class Game {
       html = `${key}Step out of the wardrobe`; use = () => this._unhide();
     } else if (it && it.type === 'closet') {
       html = `${key}Hide in the wardrobe`; use = () => this._hide(it);
+    } else if (it && it.type === 'paper') {
+      html = `${key}Read the librarian's note`;
+      use = () => { this.world.puzzle.seenPaper = true; this.audio.click(); this.hud.popup('Order noted', '#ffd65e'); this._syncShapes(); };
+    } else if (it && it.type === 'book') {
+      html = `${key}Take the glowing book`;
+      use = () => this._takeBook(it);
+    } else if (it && it.type === 'keypad') {
+      const p = this.world.puzzle;
+      html = p && p.unlocked ? 'The door is open' : `${key}Use the keypad`;
+      if (!p || !p.unlocked) use = () => this._openKeypad();
     } else if (it && it.type === 'wallbuy') {
       const w = WEAPONS[it.weapon];
       if (this.weapons.has(it.weapon)) { const cost = Math.round(it.cost / 2); html = `${key}Buy ${w.name} ammo <b>${cost}</b>`; use = () => { if (this.spend(cost)) this.weapons.refill(it.weapon); }; }
@@ -734,7 +809,7 @@ class Game {
     this.zombies.update(dt);
     this._updateFace(dt);
     // walked to the bottom of a stairwell
-    if (!this._descending && this.world.heightAt && this.world.heightAt(this.player.pos.x, this.player.pos.z) < -2.2) {
+    if (!this._descending && this.world.heightAt && this.world.heightAt(this.player.pos.x, this.player.pos.z) < (this.world.descendY ?? -2.2)) {
       this._descending = true;
       this.audio.door();
       this.nextFloor();
@@ -926,6 +1001,14 @@ class Game {
         this.showScreen(act === 'knives' ? 'cases' : act);
       }
     });
+    $('keypad-keys').addEventListener('click', e => {
+      const b = e.target.closest('[data-k]'); if (!b) return;
+      const k = b.dataset.k;
+      if (k === 'clear') { this._keyEntry = ''; this.audio.click(); this._syncKeypad(); }
+      else if (k === 'enter') this._keypadSubmit();
+      else this._keypadPress(k);
+    });
+    $('keypad-close').addEventListener('click', () => this._closeKeypad());
     $('buy-flash').addEventListener('click', () => { if (!this.hasLight && this.spend2(FLASH_COST)) { this.hasLight = true; this.audio.upgrade(); this._syncElevator(); } });
     $('buy-picks').addEventListener('click', () => { if (this.spend2(PICK_COST)) { this.lockpicks += PICK_QTY; this.audio.buy(); this._syncElevator(); } });
     $('set-sens').addEventListener('input', e => { save.settings.sens = parseFloat(e.target.value); this._syncSettings(); });

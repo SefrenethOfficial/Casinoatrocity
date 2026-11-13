@@ -51,10 +51,15 @@ export class World {
     this.Z = this.zone = zone;
     this.seed = seed;
     const rng = this.rng = mulberry(seed + floor * 101);
-    this.gw = Math.min(3 + Math.floor(floor / 2), 5);
-    this.gh = Math.min(3 + Math.floor((floor + 1) / 2), 5);
-    this.w = 1 + this.gw * PITCH;
-    this.h = 1 + this.gh * PITCH;
+    if (zone.custom) {
+      this.gw = this.gh = 1;
+      this.w = zone.size[0]; this.h = zone.size[1];
+    } else {
+      this.gw = Math.min(3 + Math.floor(floor / 2), 5);
+      this.gh = Math.min(3 + Math.floor((floor + 1) / 2), 5);
+      this.w = 1 + this.gw * PITCH;
+      this.h = 1 + this.gh * PITCH;
+    }
     this.blockedGrid = new Uint8Array(this.w * this.h).fill(1);
     this.flow = new Int16Array(this.w * this.h).fill(-1);
     this.roomOf = new Int16Array(this.w * this.h).fill(0);
@@ -69,12 +74,13 @@ export class World {
     this.lamps = [];
     this.ramps = [];       // sloped / raised floor regions: { minX, maxX, minZ, maxZ, axis, from, to }
     this.floorHoles = new Set();   // cells the floor plane skips, so stairwells are open
+    this.noWall = new Set();       // solid cells that are furniture, not room walls (no wall quad)
     this.descendY = -2.4;  // walk below this on the stairwell and the next floor loads
     this.playerSpawn = new THREE.Vector3();
     this.mystery = null;
     this.time = 0;
     this._queue = new Int32Array(this.w * this.h);
-    this._genLayout();
+    if (zone.custom) zone.layout(this); else this._genLayout();
     this._build();
   }
 
@@ -202,7 +208,7 @@ export class World {
 
     // walls: one quad for every open cell edge that touches solid wall
     const doorAt = new Map(); for (const d of this.doors) doorAt.set(d.cz * w + d.cx, d);
-    const solid = (cx, cz) => cx < 0 || cz < 0 || cx >= w || cz >= this.h || (this.blockedGrid[cz * w + cx] === 1 && !doorAt.has(cz * w + cx));
+    const solid = (cx, cz) => cx < 0 || cz < 0 || cx >= w || cz >= this.h || (this.blockedGrid[cz * w + cx] === 1 && !doorAt.has(cz * w + cx) && !this.noWall.has(cz * w + cx));
     for (let cz = 0; cz < this.h; cz++) for (let cx = 0; cx < w; cx++) {
       if (solid(cx, cz) || doorAt.has(cz * w + cx)) continue;
       const [x, z] = this.center(cx, cz);
@@ -218,7 +224,8 @@ export class World {
     scene.add(new THREE.HemisphereLight(Z.hemi[0], Z.hemi[1], Z.hemi[2]));
 
     this.wallGrid = this.blockedGrid.slice();   // structural only; furniture is added below as colliders
-    for (const r of this.rooms) { if (r.used) this._dressRoom(r); else this.lamps.push(null); }
+    if (Z.custom) Z.geometry(this, S, D, M, K);
+    else for (const r of this.rooms) { if (r.used) this._dressRoom(r); else this.lamps.push(null); }
     for (const d of this.doors) this._buildDoor(d);
     // the floor goes down last, cell by cell, skipping anything a stairwell has opened up
     for (let cz = 0; cz < this.h; cz++) for (let cx = 0; cx < w; cx++) {
@@ -331,32 +338,33 @@ export class World {
 
   // A real stairwell: two cells of steps sinking into the floor, grid-aligned so the hole in the
   // floor lines up with the flight. Walk to the bottom and the next floor loads.
-  buildStairwell(cx, cz) {
+  buildStairwell(cx, cz, baseY = 0) {
     const scene = this.scene, D = this.D, M = this.M, drop = 2.6;
     const a = Math.floor(cx / CELL), b = Math.floor(cz / CELL);
     const x0 = a * CELL, z0 = b * CELL, z1 = z0 + CELL * 2, mx = x0 + CELL / 2;
-    this.ramps.push({ minX: x0, maxX: x0 + CELL, minZ: z0, maxZ: z1, axis: 'z', a0: z0, a1: z1, from: 0, to: -drop });
+    this.ramps.push({ minX: x0, maxX: x0 + CELL, minZ: z0, maxZ: z1, axis: 'z', a0: z0, a1: z1, from: baseY, to: baseY - drop });
+    this.descendY = baseY - drop + 0.4;
     for (const bb of [b, b + 1]) { this.floorHoles.add(bb * this.w + a); this.blockedGrid[bb * this.w + a] = 0; }
 
     const n = 10, run = z1 - z0;
     for (let i = 0; i < n; i++) {
-      const t = i / n, zz = z0 + run * (t + 0.5 / n), y = -drop * t;
+      const t = i / n, zz = z0 + run * (t + 0.5 / n), y = baseY - drop * t;
       D.box(M.dark, CELL, 0.1, run / n + 0.03, mx, y - 0.05, zz);
       D.box(M.black, CELL, drop / n + 0.04, 0.05, mx, y - drop / n / 2, zz - run / n * 0.5);
     }
-    D.box(M.black, CELL, 2.2, 0.2, mx, -drop - 1.0, z1 - 0.1);       // the dark below
-    D.box(M.black, CELL + 0.3, 0.3, 0.3, mx, -drop - 0.15, z1 - 0.15);
+    D.box(M.black, CELL, 2.2, 0.2, mx, baseY - drop - 1.0, z1 - 0.1);       // the dark below
+    D.box(M.black, CELL + 0.3, 0.3, 0.3, mx, baseY - drop - 0.15, z1 - 0.15);
     for (const sx of [-CELL / 2 - 0.07, CELL / 2 + 0.07]) {
-      D.box(M.dark, 0.16, drop + 1.2, run + 0.1, mx + sx, -drop / 2 + 0.1, z0 + run / 2);
-      D.cyl(M.brass, 0.05, 0.05, run + 0.2, mx + sx * 0.8, 0.6 - drop / 2, z0 + run / 2, 6, Math.atan2(drop, run), Math.PI / 2);
+      D.box(M.dark, 0.16, drop + 1.2, run + 0.1, mx + sx, baseY - drop / 2 + 0.1, z0 + run / 2);
+      D.cyl(M.brass, 0.05, 0.05, run + 0.2, mx + sx * 0.8, baseY + 0.6 - drop / 2, z0 + run / 2, 6, Math.atan2(drop, run), Math.PI / 2);
     }
-    const pit = new THREE.PointLight(0xffd9a0, 10, 7, 1.6); pit.position.set(mx, -drop + 0.9, z1 - 0.6); scene.add(pit);
+    const pit = new THREE.PointLight(0xffd9a0, 10, 7, 1.6); pit.position.set(mx, baseY - drop + 0.9, z1 - 0.6); scene.add(pit);
     const signMat = new THREE.MeshBasicMaterial({ map: plaqueTex('EXIT', '#0a3a1a', '#7dffa8') });
-    D.box(M.black, 1.25, 0.46, 0.08, mx, 2.55, z0 - 0.08);
-    D.add(signMat, new THREE.PlaneGeometry(1.15, 0.38), mx, 2.55, z0 - 0.13);
-    D.add(signMat, new THREE.PlaneGeometry(1.15, 0.38), mx, 2.55, z0 - 0.03, Math.PI);
+    D.box(M.black, 1.25, 0.46, 0.08, mx, baseY + 2.55, z0 - 0.08);
+    D.add(signMat, new THREE.PlaneGeometry(1.15, 0.38), mx, baseY + 2.55, z0 - 0.13);
+    D.add(signMat, new THREE.PlaneGeometry(1.15, 0.38), mx, baseY + 2.55, z0 - 0.03, Math.PI);
     const label = sprite(['FLOOR ' + (this.floor + 1)], '#7dffa8', 1.25);
-    label.position.set(mx, 1.95, z0 - 0.3); scene.add(label);
+    label.position.set(mx, baseY + 1.95, z0 - 0.3); scene.add(label);
     this.stairwell = { x: mx, z: z0 + run / 2, top: z0 };
   }
 
@@ -471,6 +479,7 @@ export class World {
       this._wasFlicker = true;
     } else if (this._wasFlicker) { this._wasFlicker = false; for (const l of this.lamps) if (l) { l.intensity = l.userData.base; l.userData.bulb.visible = true; } }
     const dt = Math.min(Math.max(time - (this._lastT ?? time), 0), 0.2); this._lastT = time;
+    if (this.Z.update) this.Z.update(this, dt);
     for (const d of this.doors) {
       if (!d.open || d.hinge.rotation.y === d.swing) continue;
       const step = dt * 4.5, diff = d.swing - d.hinge.rotation.y;
