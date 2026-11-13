@@ -154,7 +154,7 @@ class Game {
     this.face = { phase: 'warn', t: 0, sprite: null, route: null, seg: 0, pos: new THREE.Vector3() };
     this.world.flicker = true;
     this.music.play('face', { loop: true });
-    this.music.faceVolume(0);
+    this.music.faceVolume(0.55);
     $('face-warn').classList.add('on'); $('face-warn').style.opacity = 0;
   }
 
@@ -174,7 +174,7 @@ class Game {
     if (f.phase === 'warn') {
       const k = Math.min(f.t / 6, 1), pulse = 0.5 + 0.5 * Math.sin(f.t * (4 + k * 12));
       $('face-warn').style.opacity = (0.1 + k * 0.55 * (0.55 + 0.45 * pulse)).toFixed(3);
-      this.music.faceVolume(0.1 + k * 0.28);
+      this.music.faceVolume(0.55 + k * 0.35);
       if (f.t < 6) return;
       if (!this.faceTex) { this.faceTex = new THREE.TextureLoader().load('assets/img/face.webp'); this.faceTex.colorSpace = THREE.SRGBColorSpace; }
       f.route = this._faceRoute(); f.seg = 0; f.pos.copy(f.route[0]);
@@ -194,7 +194,7 @@ class Game {
       }
       f.sprite.position.set(f.pos.x, 1.7, f.pos.z);
       const pp = this.player.pos, dist = Math.hypot(pp.x - f.pos.x, pp.z - f.pos.z);
-      this.music.faceVolume(Math.max(0.12, Math.min(1, 1 - (dist - 3) / 22)));   // louder the closer it gets
+      this.music.faceVolume(Math.max(0.7, Math.min(1, 1.15 - (dist - 3) / 16)));   // louder the closer it gets
       $('face-warn').style.opacity = Math.max(0, Math.min(0.85, 1 - (dist - 2) / 15)).toFixed(3);
       // everything it passes dies
       for (const z of this.zombies.zombies) {
