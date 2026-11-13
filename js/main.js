@@ -622,7 +622,6 @@ class Game {
     // every few rooms there is a chance the face comes through
     this.sinceFace++;
     if (!this.face && this.sinceFace >= 3 && room !== this.world.stairsRoom && Math.random() < 0.35) this._startFace();
-    else if (!this.face && Math.random() < 0.3) this.world.flickerRoom(room, 0.8 + Math.random() * 1.8);   // a harmless flicker, no face behind it
   }
   // One steady ramp for the whole run: every room you enter is a little harder than the last.
   difficulty() { return Math.max(this.depth, (this.floor - 1) * 6 + 1); }
