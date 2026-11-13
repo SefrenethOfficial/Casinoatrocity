@@ -29,11 +29,55 @@ const MAT = {
   eyeWhite: basic(0xfff4d8), eyeRed: basic(0xff2a1a), eyeGreen: basic(0xb6ff3a), eyeOrange: basic(0xff9a1a),
 };
 
+// Four rigs — a walker, a sprinter, something on all fours, and a heavy — dressed differently in
+// every place, so each zone has its own dead.
+const RIG = {
+  walk:   { rig: 'biped', build: 'bellhop', hp: 1,   speed: 1,    dmg: 30, reach: 1.35, radius: 0.36, points: 60,  chips: 3,  hitAt: 0.38, attackDur: 0.95, centerY: 1.15, neckY: 1.55, rise: 1.1, gore: 1 },
+  runner: { rig: 'biped', build: 'maid',    hp: 0.7, speed: 1.6,  dmg: 22, reach: 1.3,  radius: 0.32, points: 80,  chips: 4,  hitAt: 0.26, attackDur: 0.7,  centerY: 1.05, neckY: 1.45, rise: 0.8, gore: 0.9 },
+  crawler:{ rig: 'crawl', build: 'lodger',  hp: 0.5, speed: 1.75, dmg: 18, reach: 1.3,  radius: 0.42, points: 50,  chips: 3,  hitAt: 0.24, attackDur: 0.7,  centerY: 0.55, neckY: 0.6,  rise: 0.6, gore: 0.8 },
+  heavy:  { rig: 'heavy', build: 'butcher', hp: 5.5, speed: 0.62, dmg: 55, reach: 1.95, radius: 0.6,  points: 250, chips: 12, hitAt: 0.62, attackDur: 1.35, centerY: 1.15, neckY: 1.6,  rise: 1.6, gore: 2.2 },
+};
+const kind = (base, name, outfit) => ({ ...RIG[base], name, outfit });
+
 export const ENEMY_TYPES = {
-  bellhop: { name: 'bellhop', rig: 'biped', hp: 1,   speed: 1,    dmg: 30, reach: 1.35, radius: 0.36, points: 60,  chips: 3,  hitAt: 0.38, attackDur: 0.95, centerY: 1.15, neckY: 1.55, rise: 1.1, gore: 1 },
-  maid:    { name: 'maid',    rig: 'biped', hp: 0.7, speed: 1.6,  dmg: 22, reach: 1.3,  radius: 0.32, points: 80,  chips: 4,  hitAt: 0.26, attackDur: 0.7,  centerY: 1.05, neckY: 1.45, rise: 0.8, gore: 0.9 },
-  lodger:  { name: 'lodger',  rig: 'crawl', hp: 0.5, speed: 1.75, dmg: 18, reach: 1.3,  radius: 0.42, points: 50,  chips: 3,  hitAt: 0.24, attackDur: 0.7,  centerY: 0.55, neckY: 0.6,  rise: 0.6, gore: 0.8 },
-  butcher: { name: 'butcher', rig: 'heavy', hp: 5.5, speed: 0.62, dmg: 55, reach: 1.95, radius: 0.6,  points: 250, chips: 12, hitAt: 0.62, attackDur: 1.35, centerY: 1.15, neckY: 1.6,  rise: 1.6, gore: 2.2 },
+  // the hotel
+  bellhop: kind('walk', 'bellhop', {}),
+  maid: kind('runner', 'maid', {}),
+  lodger: kind('crawler', 'lodger', {}),
+  butcher: kind('heavy', 'butcher', {}),
+  // the car park
+  attendant: kind('walk', 'attendant', { coat: 0xd4761f, skin: 0x8f9a8a }),
+  valet: kind('runner', 'valet', { coat: 0x1d2740, skin: 0xbcc0c4 }),
+  greaser: kind('crawler', 'greaser', { coat: 0x2b2b2f, skin: 0x7c7466 }),
+  mechanic: kind('heavy', 'mechanic', { coat: 0x27405e, skin: 0x92776a, accent: 0x6d6a5c }),
+  // the backrooms
+  wanderer: kind('walk', 'wanderer', { coat: 0xb0a271, skin: 0xa9a992 }),
+  skitter: kind('crawler', 'skitter', { coat: 0xc9bd82, skin: 0xcfc9ae }),
+  hollow: kind('heavy', 'hollow', { coat: 0x8d8363, skin: 0xb3ab8e, accent: 0xc3b98f }),
+  // the washrooms
+  bather: kind('walk', 'bather', { coat: 0xcfd8d2, skin: 0x9fb0ad }),
+  drowned: kind('crawler', 'drowned', { coat: 0x51706e, skin: 0x8fa8a6 }),
+  plumber: kind('heavy', 'plumber', { coat: 0x2f5a46, skin: 0x8e8378, accent: 0xb6bdb6 }),
+  // the offices
+  clerk: kind('walk', 'clerk', { coat: 0x4a4e57, skin: 0xa8a295 }),
+  intern: kind('runner', 'intern', { coat: 0xd6d2c6, skin: 0xb8b4a6 }),
+  filer: kind('crawler', 'filer', { coat: 0x6b6f76, skin: 0x9e9a8e }),
+  manager: kind('heavy', 'manager', { coat: 0x1c1c20, skin: 0x8d8478, accent: 0x55585e }),
+  // the crisp dimension
+  crisp: kind('walk', 'crisp', { coat: 0xe8bf3a, skin: 0xd9c98a }),
+  fryer: kind('heavy', 'fryer', { coat: 0xc8a52c, skin: 0xd2bd80, accent: 0xefe3a8 }),
+  greasewalker: kind('crawler', 'greasewalker', { coat: 0xd8b84a, skin: 0xcdbd86 }),
+};
+
+// Who turns up where, cheapest first. The library is left out: the Stalker is enough.
+export const ROSTERS = {
+  hotel:     ['bellhop', 'maid', 'lodger', 'butcher'],
+  carpark:   ['attendant', 'valet', 'greaser', 'mechanic'],
+  backrooms: ['wanderer', 'wanderer', 'skitter', 'hollow'],
+  bathroom:  ['bather', 'bather', 'drowned', 'plumber'],
+  office:    ['clerk', 'intern', 'filer', 'manager'],
+  chips:     ['crisp', 'crisp', 'greasewalker', 'fryer'],
+  library:   [],
 };
 
 const tmp = { x: 0, z: 0 };
@@ -64,7 +108,7 @@ class Zombie {
     this.arms = [];
     const g = this.group = new THREE.Group();
     g.rotation.order = 'YXZ';
-    BUILD[type](this);
+    BUILD[this.def.build || type](this, this.def.outfit || {});
     g.scale.setScalar(this.scale);
     g.position.set(x, -2.2, z);
     g.rotation.y = this.yaw;
@@ -94,10 +138,13 @@ function fingers(z, hand, n, len, w = 0.022, spread = 0.03) {
   for (let i = 0; i < n; i++) { const f = z.add(G(w, len, w, -0.5), MAT.claw, null, (i - (n - 1) / 2) * spread, -0.04, 0.02, hand); f.rotation.x = -0.25; }
 }
 
+// Each zone dresses the same four rigs differently, so its dead look like they belong there.
+const OUT = o => ({ coat: null, skin: null, trouser: null, accent: null, ...o });
+
 const BUILD = {
   // A dead bellhop still in uniform: brass buttons, pillbox hat, jaw hanging open.
-  bellhop(z) {
-    const coat = pick(MAT.uniform), skin = pick(MAT.dead);
+  bellhop(z, O = {}) {
+    const coat = O.coat ? lam(O.coat) : pick(MAT.uniform), skin = O.skin ? lam(O.skin, O.glow || 0) : pick(MAT.dead);
     z.add(G(0.38, 0.2, 0.23), MAT.trouser, 'body', 0, 0.95, 0);
     const t = z.torso = z.add(G(0.46, 0.58, 0.26, 0.5), coat, 'body', 0, 1.02, 0);
     t.rotation.x = z.lean;
@@ -133,14 +180,15 @@ const BUILD = {
   },
 
   // Housekeeping. Thin, bent double, hair over her face, far too fast.
-  maid(z) {
-    const skin = pick(MAT.pale);
+  maid(z, O = {}) {
+    const skin = O.skin ? lam(O.skin, O.glow || 0) : pick(MAT.pale);
+    const dress = O.coat ? lam(O.coat) : MAT.black;
     z.lean = 0.5; z.style = 'maid';
-    z.add(G(0.5, 0.5, 0.42), MAT.black, 'body', 0, 0.8, 0);
+    z.add(G(0.5, 0.5, 0.42), dress, 'body', 0, 0.8, 0);
     z.add(G(0.52, 0.05, 0.44), MAT.white, null, 0, 0.56, 0);
     z.add(G(0.32, 0.44, 0.02), MAT.white, null, 0, 0.8, 0.215);
     z.add(G(0.2, 0.22, 0.02), MAT.gore, null, rnd(-0.05, 0.05), 0.74, 0.222);
-    const t = z.torso = z.add(G(0.33, 0.5, 0.2, 0.5), MAT.black, 'body', 0, 1.02, 0);
+    const t = z.torso = z.add(G(0.33, 0.5, 0.2, 0.5), dress, 'body', 0, 1.02, 0);
     t.rotation.x = z.lean;
     z.add(G(0.2, 0.28, 0.02), MAT.white, null, 0, 0.18, 0.105, t);
     z.add(G(0.25, 0.05, 0.22), MAT.white, null, 0, 0.49, 0, t);
@@ -159,7 +207,7 @@ const BUILD = {
 
     for (const sx of [-1, 1]) {
       const arm = z.limb(sx * 0.21, 1.44, 0.12, 0.07, 0.38, 0.42, skin), low = arm.userData.lower;
-      z.add(G(0.13, 0.13, 0.13), MAT.black, null, 0, -0.03, 0, arm);
+      z.add(G(0.13, 0.13, 0.13), dress, null, 0, -0.03, 0, arm);
       z.add(G(0.085, 0.04, 0.085), MAT.white, null, 0, -0.34, 0, low);
       const hand = z.add(G(0.075, 0.08, 0.05), skin, null, 0, -0.45, 0, low); fingers(z, hand, 4, 0.24, 0.016, 0.022);
       z.arms.push(arm);
@@ -171,8 +219,8 @@ const BUILD = {
   },
 
   // A guest in striped pyjamas, bent over backwards and walking on hands and feet, head upside down.
-  lodger(z) {
-    const pj = pick(MAT.pyjama), skin = pick(MAT.dead);
+  lodger(z, O = {}) {
+    const pj = O.coat ? lam(O.coat) : pick(MAT.pyjama), skin = O.skin ? lam(O.skin, O.glow || 0) : pick(MAT.dead);
     const t = z.torso = z.add(G(0.46, 0.24, 0.82), pj, 'body', 0, 0.64, 0);
     for (let i = 0; i < 5; i++) z.add(G(0.47, 0.25, 0.035), MAT.white, null, 0, 0, -0.32 + i * 0.16, t);
     z.add(G(0.24, 0.05, 0.3), MAT.gore, null, 0, 0.13, 0.05, t);
@@ -201,17 +249,18 @@ const BUILD = {
   },
 
   // The kitchen's butcher: sack over the head, chef's hat, filthy apron, cleaver and meat hook.
-  butcher(z) {
-    const skin = pick(MAT.flesh);
+  butcher(z, O = {}) {
+    const skin = O.skin ? lam(O.skin, O.glow || 0) : pick(MAT.flesh);
+    const shirt = O.coat ? lam(O.coat) : MAT.shirt, apron = O.accent ? lam(O.accent) : MAT.apron;
     z.lean = 0.15;
-    z.add(G(0.86, 0.42, 0.64), MAT.shirt, 'body', 0, 0.86, 0.05);
-    z.add(G(0.66, 0.62, 0.03), MAT.apron, null, 0, 0.72, 0.385);
+    z.add(G(0.86, 0.42, 0.64), shirt, 'body', 0, 0.86, 0.05);
+    z.add(G(0.66, 0.62, 0.03), apron, null, 0, 0.72, 0.385);
     z.add(G(0.4, 0.3, 0.02), MAT.gore, null, 0.08, 0.7, 0.402); z.add(G(0.16, 0.34, 0.02), MAT.gore, null, -0.2, 0.56, 0.402);
-    const t = z.torso = z.add(G(0.9, 0.7, 0.52, 0.5), MAT.shirt, 'body', 0, 1.02, 0);
+    const t = z.torso = z.add(G(0.9, 0.7, 0.52, 0.5), shirt, 'body', 0, 1.02, 0);
     t.rotation.x = z.lean;
-    z.add(G(0.62, 0.52, 0.03), MAT.apron, null, 0, 0.28, 0.275, t);
+    z.add(G(0.62, 0.52, 0.03), apron, null, 0, 0.28, 0.275, t);
     z.add(G(0.34, 0.3, 0.02), MAT.gore, null, -0.08, 0.3, 0.292, t);
-    for (const sx of [-1, 1]) z.add(G(0.07, 0.3, 0.56), MAT.apron, null, sx * 0.26, 0.62, 0, t);
+    for (const sx of [-1, 1]) z.add(G(0.07, 0.3, 0.56), apron, null, sx * 0.26, 0.62, 0, t);
     z.add(G(0.94, 0.08, 0.56), MAT.black, null, 0, 0.04, 0, t);
 
     const h = z.head = z.add(G(0.36, 0.38, 0.36, 0.5), MAT.burlap, 'head', 0, 0.7, 0.06, t);
@@ -226,7 +275,7 @@ const BUILD = {
 
     for (const sx of [-1, 1]) {
       const arm = z.limb(sx * 0.6, 1.6, 0.02, 0.25, 0.44, 0.42, skin), low = arm.userData.lower;
-      z.add(G(0.3, 0.14, 0.3), MAT.shirt, null, 0, -0.06, 0, arm);
+      z.add(G(0.3, 0.14, 0.3), shirt, null, 0, -0.06, 0, arm);
       const fist = z.add(G(0.3, 0.26, 0.3), skin, null, 0, -0.5, 0, low);
       if (sx > 0) {   // cleaver
         z.add(G(0.06, 0.07, 0.34), MAT.woodH, null, 0, -0.02, 0.1, fist);
@@ -365,6 +414,8 @@ export class ZombieDirector {
   // Queue a batch of monsters to rise from the given spawn points (one room's worth).
   spawnRoom(points, count, difficulty) {
     if (!points.length) return;
+    const zone = this.game.zone ? this.game.zone.id : 'hotel';
+    if (ROSTERS[zone] && !ROSTERS[zone].length) return;   // some places have something else in them
     this._points = points;
     this._diff = Math.max(this._diff, difficulty);
     this.round = Math.max(this.round, difficulty);
@@ -374,18 +425,24 @@ export class ZombieDirector {
 
   // d = rooms entered this run. Bellhops only at first; each nastier type joins later and its
   // share of the pack grows steadily from there.
+  // d = rooms entered this run. The zone decides who they are; the depth decides how nasty.
   pickType(d) {
+    const zone = this.game.zone ? this.game.zone.id : 'hotel';
+    const roster = ROSTERS[zone] || ROSTERS.hotel;
+    if (!roster.length) return null;
+    const [walk, runner, crawler, heavy] = roster;
     const r = Math.random();
-    const butcher = d >= 12 ? Math.min(0.03 * (d - 11), 0.2) : 0;
-    const lodger = d >= 7 ? Math.min(0.04 * (d - 6), 0.28) : 0;
-    const maid = d >= 3 ? Math.min(0.05 * (d - 2), 0.3) : 0;
-    if (r < butcher) return 'butcher';
-    if (r < butcher + lodger) return 'lodger';
-    if (r < butcher + lodger + maid) return 'maid';
-    return 'bellhop';
+    const pH = heavy && d >= 12 ? Math.min(0.03 * (d - 11), 0.2) : 0;
+    const pC = crawler && d >= 7 ? Math.min(0.04 * (d - 6), 0.28) : 0;
+    const pR = runner && d >= 3 ? Math.min(0.05 * (d - 2), 0.3) : 0;
+    if (r < pH) return heavy;
+    if (r < pH + pC) return crawler;
+    if (r < pH + pC + pR) return runner;
+    return walk;
   }
 
   spawn(type, s, difficulty) {
+    if (!type || !ENEMY_TYPES[type]) return null;
     const audio = this.game.audio, def = ENEMY_TYPES[type];
     const speed = Math.min(this.speedFor(difficulty) * def.speed * rnd(0.8, 1.15), def.rig === 'crawl' ? 5.4 : type === 'maid' ? 4.8 : 3.6);
     const z = new Zombie(type, s.x + rnd(-0.5, 0.5), s.z + rnd(-0.5, 0.5), Math.round(this.healthFor(difficulty) * def.hp), speed);

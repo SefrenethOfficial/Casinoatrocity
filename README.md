@@ -10,7 +10,9 @@ A PSX-styled browser FPS built with [three.js](https://threejs.org/). Check in t
 - **The elevator** — a ride-down intermission (with its own music) where you can buy a **Flashlight** and **Lockpicks** with chips before the doors open.
 - **A randomly generated hotel** — every floor is a fresh maze of dark wooden rooms joined by **numbered doors**, some **locked** (pick them with a lockpick). Each room spawns its own monsters when you step in. Rooms are dark — bring a light. Find the **stairs down** to descend to a bigger, tougher floor.
 - **Enemies** — bellhops shamble, maids sprint, lodgers scuttle in on all fours and the butcher soaks damage and hits hard. Gore, dismemberment and blood included.
-- **Places** — the lift drops you somewhere different every couple of floors, at random: the hotel, the backrooms (you clip through and land on your side), the washrooms, a sublevel car park, the offices, and the Crisp Dimension. The elevator tells you where you're headed.
+- **Places, in order** — hotel, car park, **library**, backrooms, washrooms, offices, Crisp Dimension, a couple of floors each. Each has its own enemies; the library is a single hand-built floor.
+- **The library** — the Stalker is in there: blind, unkillable, hunts by sound. Crouch (Ctrl) to move quietly, and remember a bullet's impact is louder than your gun, so you can shoot a far wall to pull it away. Read the librarian's note for the order of five shapes, find the glowing books that pair each shape with a digit, and punch the five digits into the keypad by the locked door.
+- **Hiding** — get into a wardrobe or a stall. If something works out where you are, hold Space to steady your breathing and keep your heart rate in the band, or it opens the door.
 - **The face** — every few rooms the lights may stutter and a song kicks in: a few seconds later something flies down the corridor and kills everything in its path. Hide in a wardrobe (F) until it passes.
 - **A proper death screen** — when you die it tells you exactly what got you, where, and how to avoid it next time.
 - **PSX look** — rendered at 240p (360p/480p in Settings) with vertex wobble, chunky textures, dithering and choppy animation.
@@ -50,7 +52,9 @@ Then open http://localhost:8000.
 - `index.html`, `css/style.css` — page, menus, HUD, death and elevator screens
 - `js/main.js` — game loop, state flow (lobby → elevator → hotel → death)
 - `js/lobby.js` — the rainy exterior and cozy hall
-- `js/zones.js` — the six places (surfaces, lighting, props) a floor can be
+- `js/library.js` — the hand-built library floor and its book puzzle
+- `js/stalker.js` — the blind thing that hunts by sound
+- `js/zones.js` — the places (surfaces, lighting, props) a floor can be
 - `js/build.js` — shared art kit: textures, furniture, and the geometry batcher used by the lobby and hotel
 - `js/world.js` — the procedural hotel generator, collision and enemy pathing
 - `js/player.js`, `js/weapons.js`, `js/zombies.js` — player, guns/knife, enemies

@@ -217,7 +217,7 @@ export class WeaponSystem {
     this.kick = 1;
     this.forcePose = true;
     game.audio.shot(def.sound);
-    game.makeNoise(game.player.pos.x, game.player.pos.z, 45);   // gunfire carries a long way
+    game.makeNoise(game.player.pos.x, game.player.pos.z, 16);   // the muzzle gives away roughly where you are
 
     const cam = game.camera;
     const fwd = player.forward(V1);
@@ -252,7 +252,8 @@ export class WeaponSystem {
           if (pierced >= def.pierce) end = h.point;
         } else {
           // first solid surface: stop here, and paint it if the bullet came out of someone nearby
-          if (!end) { end = h.point; game.effects.burst(h.point, 3, 2.2); if (!thud) { thud = true; game.audio.impact(h.distance); } }
+          // the strike is louder than the muzzle, so shooting a far wall pulls the Stalker away
+          if (!end) { end = h.point; game.effects.burst(h.point, 3, 2.2); if (!thud) { thud = true; game.audio.impact(h.distance); game.makeNoise(h.point.x, h.point.z, 42); } }
           if (lastFlesh >= 0 && h.distance - lastFlesh < 5 && h.face) {
             normal.copy(h.face.normal).transformDirection(h.object.matrixWorld);
             game.effects.wallDecal(h.point, normal, 0.6 + Math.random() * 0.9);
